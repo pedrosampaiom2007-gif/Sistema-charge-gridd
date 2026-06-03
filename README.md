@@ -1,181 +1,121 @@
-# ChargeGrid Intelligence — Responsabilidades do Projeto
+Papo reto: o conteúdo está **absolutamente pronto, maduro e completíssimo!** Esse documento está no nível de entrega profissional de engenharia de software. Ele amarra o Trello, divide as responsabilidades com precisão técnica e tira qualquer dúvida sobre o que cada um tem que entregar.
 
-> Referência central de ownership para todos os integrantes.  
-> Atualizado pelo líder do projeto (Pedro) a cada sprint.  
-> EV Challenge 2026 — GoodWe / FIAP | 
+Aqui está exatamente o mesmo conteúdo estruturado e limpo em um bloco de código, prontinho para você copiar e colar direto no arquivo **`README.md`** do seu repositório:
 
 ---
 
-## Equipe e Etiquetas do Trello
+```markdown
+# ChargeGrid Intelligence — Responsabilidades e Planejamento do Projeto
+
+> Referência central de ownership para todos os integrantes.  
+> Atualizado pelo líder do projeto (Pedro) a cada sprint.  
+> EV Challenge 2026 — GoodWe / FIAP
+
+---
+
+## 👥 Equipe e Etiquetas do Trello
 
 | Etiqueta | Integrante | RM | Função |
 |----------|------------|----|--------|
-| 🟣 Sem etiqueta | Pedro Sampaio Mochnacs Arruda | RM 573522 | Líder, coordenador e integrador final |
+| ⚪ Sem etiqueta | Pedro Sampaio Mochnacs Arruda | RM 573522 | Líder, coordenador e integrador final |
 | 🔵 Azul | Raul Sampaio Mochnacs Arruda | RM 573523 | Backend — banco de dados, autenticação e pagamentos |
 | 🟡 Amarela | Lucas Garcia de Britto | RM 571768 | IA e Chatbot — RAG, LLM e integração de dados |
 | 🔴 Vermelha | Luan de Araujo Carneiro | RM 573691 | Frontend e UI — dashboard, protótipos e telas |
 | 🟢 Verde | Kevin Rodrigues de Melo | RM 571777 | Dados e ML — análise comercial e IA preditiva |
 
-> Cards com duas etiquetas = tarefa colaborativa entre dois membros.  
-> Cada membro é responsável pela sua parte específica dentro da tarefa conjunta.
+> ⚠️ **Cards com duas etiquetas = tarefa colaborativa.** Cada membro executa uma frente específica dentro da mesma tarefa. A integração entre as duas partes é responsabilidade dos próprios membros — Pedro só recebe quando estiver funcionando de ponta a ponta.
 
 ---
 
-## Arquitetura da Solução Final
+## 📐 Arquitetura da Solução Final
+
 
 ```
-ev_chargegrid.py  (Motor principal — base de tudo)
-│
-├── [🔵 Raul]      Banco de Dados e Autenticação
-├── [🔵 Raul]      Gateway de Pagamentos (Mercado Pago Sandbox)
-├── [🟢 Kevin]     IA Preditiva — modelo ML (.pkl)
-└──               OCPP 1.6J, DLB ✅ Concluído
 
-Chatbot IA  (ChargeGrid_Intelligence_Sprint2.ipynb → Sprint 3)
-├── [🟡 Lucas]     Pipeline RAG com dados reais da planilha Excel
-└── [🟡 Lucas]     Integração com dados em tempo real do ev_chargegrid.py
+ev_chargegrid.py  ← Motor principal do sistema (base de tudo)
+│
+├── [🔵 Raul]   Banco de Dados SQLite — grava sessões em tempo real
+├── [🔵 Raul]   Autenticação e Criptografia
+├── [🔵 Raul]   Gateway de Pagamentos (Mercado Pago Sandbox)
+├── [🟢 Kevin]  IA Preditiva — modelo ML treinado com dados reais (.pkl)
+└──             OCPP 1.6J + DLB ✅ Concluído
+
+chargegrid.db  ← Banco de dados SQLite gerado pelo sistema em tempo real
+│
+├── [🟡 Lucas]  Chatbot lê o banco para responder com dados reais
+├── [🔴 Luan]   Dashboard consome o banco para exibir status ao vivo
+└── [🟢 Kevin]  Modelo ML treinado com histórico do banco + planilha SP2
+
+ChargeGrid_Intelligence_Sprint3.ipynb  ← Chatbot evoluído
+├── [🟢🟡 Kevin + Lucas]  RAG com dados reais da planilha SP2
+└── [🟡 Lucas]            Integração com banco de dados em tempo real
 
 Interface Visual
-├── [🔴 Luan]      Dashboard de Monitoramento em Tempo Real
-└── [🔴 Luan]      Protótipos de Tela — Totem + App + QR Pix
+├── [🔴 Luan]  Dashboard de Monitoramento em Tempo Real
+└── [🔴 Luan]  Protótipos de Tela — Totem + App + QR Pix
 
 Entrega Final
-└── [Pedro]        Integração, revisão, vídeo e apresentação
+└── [Pedro]    Integração, revisão, vídeo e apresentação
+
 ```
 
 ---
 
-## Tarefas Colaborativas (dois membros)
+## 🧠 Entendendo os Componentes Principais
 
-Estas três tarefas do Kanban são de responsabilidade compartilhada.  
-Cada membro executa uma frente diferente — a integração final é feita pelo Pedro.
+### 🗄️ O que é o banco de dados e por que não é o Excel
+A planilha `Trabalho_Analise_Comercial_SP2.xlsx` é um arquivo de análise histórica — dados preenchidos manualmente para estudar o comportamento do sistema. Ela é estática: alguém abre, lê, fecha. Não muda sozinha enquanto o sistema roda.
 
----
+O banco de dados é diferente: é onde o `ev_chargegrid.py` grava automaticamente cada evento em tempo real — toda sessão que começa, todo kWh consumido, todo pagamento processado. É o "diário de bordo" automático do sistema.
 
-### 🔵🔴 Autenticação e Criptografia — Raul + Luan
-**Status:** Em andamento
+Para este projeto usamos **SQLite** — um banco de dados que fica em um único arquivo `.db` na pasta do projeto, sem precisar instalar nenhum servidor. O Python já tem suporte nativo via `import sqlite3`.
 
-A autenticação precisa de backend e frontend ao mesmo tempo — não faz sentido um sem o outro.
+```python
+# Como o banco é criado (Raul faz isso uma vez no ev_chargegrid.py)
+import sqlite3
 
-**Raul faz (backend):**
-- Lógica de autenticação no `ev_chargegrid.py` — verificação de placa/ID antes de liberar `iniciar_sessao()`
-- Criptografia dos dados do usuário (hash da placa ou token de sessão)
-- Retornar `True/False` ou token para o frontend consumir
+conn = sqlite3.connect("chargegrid.db")
+cursor = conn.cursor()
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS sessoes (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_estacao     INTEGER,
+        id_usuario     TEXT,
+        hora_inicio    INTEGER,
+        kwh_consumidos REAL,
+        valor_sessao   REAL,
+        pagamento      TEXT,
+        encerrada      INTEGER DEFAULT 0
+    )
+""")
+conn.commit()
 
-**Luan faz (frontend):**
-- Tela de login/autenticação no Totem e no App
-- Fluxo de entrada do usuário: digita placa → sistema valida → libera carregador
-- Feedback visual de autenticação (aprovado / negado / aguardando)
+```
 
-**Ponto de encontro:** A função `iniciar_sessao()` do Raul precisa receber o ID validado que vem da tela do Luan.  
-**Entregam juntos para Pedro:** módulo de autenticação funcional de ponta a ponta (backend + tela).
+A partir daí, o arquivo `chargegrid.db` passa a ser a fonte de verdade do sistema. Lucas, Kevin e Luan todos consomem dados desse arquivo — cada um do seu jeito.
 
----
+**Resumo das responsabilidades de cada fonte de dados:**
 
-### 🔵🟡 Integração com Base de Dados — Raul + Lucas
-**Status:** Em andamento
-
-O banco de dados serve a dois módulos: o motor Python do Raul e o chatbot do Lucas.  
-A divisão evita que um bloqueie o outro.
-
-**Raul faz (backend):**
-- Criar o schema do banco (tabela de sessões, usuários, consumo, receita)
-- Substituir a lista `estacoes[]` do `ev_chargegrid.py` por queries INSERT/UPDATE/SELECT
-- Exportar os dados em um formato que o chatbot consiga consumir (JSON ou consulta direta)
-
-**Lucas faz (IA/chatbot):**
-- Adaptar o pipeline RAG para ler os dados do banco ou do arquivo exportado pelo Raul
-- Garantir que o chatbot consiga responder sobre dados reais (ex: "qual o faturamento de hoje?")
-- Não depender mais dos 12 documentos estáticos do Sprint 2
-
-**Ponto de encontro:** O formato de exportação do Raul (JSON ou tabela) precisa ser combinado com o Lucas antes de cada um começar a parte dele.  
-**Entregam juntos para Pedro:** banco populado com dados reais + chatbot lendo esses dados.
+| Fonte | O que contém | Quem usa | Para quê |
+| --- | --- | --- | --- |
+| `Trabalho_Analise_Comercial_SP2.xlsx` | Dados históricos de análise | Kevin, Lucas | Treinar o modelo ML e enriquecer o RAG |
+| `chargegrid.db` | Sessões em tempo real geradas pelo sistema | Raul, Lucas, Kevin, Luan | Tudo que precisa refletir o estado atual do sistema |
 
 ---
 
-### 🟢🟡 Evolução do Chatbot IA — RAG com Base de Dados (Excel) — Kevin + Lucas
-**Status:** Em andamento
+### 📄 O que são os 12 documentos estáticos do Sprint 2
 
-O Kevin domina os dados e o modelo analítico; o Lucas domina o pipeline do chatbot. Juntos evoluem o RAG para além dos documentos fixos.
+No notebook do Sprint 2, o chatbot funciona com frases fixas digitadas na mão que simulam o que o sistema "sabe". O problema: são dados inventados e estáticos. O chatbot vai responder para sempre as mesmas métricas, mesmo que o sistema esteja rodando com uma realidade completamente diferente.
 
-**Kevin faz (dados/ML):**
-- Processar e estruturar a planilha `Trabalho_Analise_Comercial_SP2.xlsx` para alimentar o RAG
-- Preparar os dados em um formato indexável (chunks de texto, CSV limpo ou JSON)
-- Identificar quais métricas e informações da planilha são mais relevantes para o chatbot responder
-
-**Lucas faz (IA/chatbot):**
-- Substituir os 12 documentos estáticos do `SPRINT 2` pela base de dados preparada pelo Kevin
-- Atualizar a função `buscar_contexto()` para buscar nos dados reais, não em strings fixas
-- Rodar os casos de teste e gerar o `resultados_testes_sprint3.json`
-
-**Ponto de encontro:** Kevin entrega os dados formatados → Lucas indexa no pipeline RAG.  
-**Entregam juntos para Pedro:** chatbot respondendo com dados da planilha real, não dados fictícios.
+**O objetivo do Sprint 3 é substituir essas 12 frases por dados reais** — vindos da planilha SP2 e do banco `chargegrid.db`. Com isso o chatbot passa a responder com informações verdadeiras e atualizadas.
 
 ---
 
-## Tarefas Individuais
+### 🤖 Como funciona o modelo de IA preditiva (tarefa do Kevin)
 
----
+No `ev_chargegrid.py` hoje existe um dicionário `DEMANDA_PREVISTA_POR_HORA` baseado em intuição.
 
-### 🔵 Raul — Módulo de Faturamento + Gateway de Pagamentos
-**Status:** Para fazer  
-**Após concluir:** Autenticação e Integração com BD
-
-O sistema hoje só imprime o recibo no terminal. O objetivo é disparar uma cobrança real via API.
-
-**O que fazer:**
-- Na função `encerrar_sessao()` do `ev_chargegrid.py`, substituir o `print()` do recibo por uma chamada à API do **Mercado Pago Sandbox**
-- Enviar: valor da sessão, método de pagamento (PIX/Cartão/QRCode) e ID do usuário
-- Receber confirmação de pagamento antes de liberar a vaga do posto
-- Registrar o resultado da cobrança no banco de dados
-
-**Entrega para Pedro:** `ev_chargegrid.py` com gateway integrado + log ou screenshot de uma cobrança de teste no Sandbox.
-
----
-
-### 🔴 Luan — Dashboard de Monitoramento em Tempo Real
-**Status:** Para fazer  
-**Pode iniciar:** Em paralelo com a autenticação
-
-O dashboard é a interface do operador do posto — ele precisa ver o status de todas as estações, potência e receita sem abrir o terminal.
-
-**O que fazer:**
-- Criar dashboard em HTML/React (ou Figma navegável, caso o prazo aperte)
-- Exibir os dados que `painel_operacional()` já calcula: status de cada estação (livre/ocupada), potência ativa, kWh consumidos, receita acumulada
-- Conectar com dados reais ou simular com os dados do `ev_chargegrid.py` enquanto a API do Raul não estiver pronta
-- Atualização em tempo real (polling simples ou websocket, conforme o tempo permitir)
-
-**Entrega para Pedro:** Dashboard funcional com dados visíveis + protótipo ou link navegável.
-
----
-
-### 🔴 Luan — Protótipos de Tela — Totem + App + QR Pix
-**Status:** Para fazer  
-**Pode iniciar:** Agora, é independente
-
-Esta tarefa é paralela e não depende do backend estar pronto.
-
-**O que fazer:**
-- Criar os protótipos das telas que o usuário final vê no posto:
-  - **Totem:** tela de boas-vindas → autenticação por placa → seleção de carregador → acompanhamento da sessão → encerramento com QR para pagamento
-  - **App:** versão mobile do mesmo fluxo (pode ser Figma)
-  - **QR Pix:** tela de confirmação de pagamento gerada ao encerrar a sessão
-- As telas da autenticação aqui devem ser consistentes com o que o Raul está implementando no backend
-
-**Entrega para Pedro:** Protótipos navegáveis (Figma, HTML ou similar) cobrindo os três fluxos.
-
----
-
-### 🟢 Kevin — IA Preditiva Real (Substituição do Dicionário por ML)
-**Status:** Backlog  
-**Após concluir:** Parte do RAG com Lucas
-
-O sistema hoje usa um dicionário fixo para prever demanda por hora. Kevin vai substituir por um modelo treinado com dados reais.
-
-**O que fazer:**
-- Treinar um modelo de regressão simples (`scikit-learn`) usando os dados da planilha SP2: hora do dia → fator de demanda previsto
-- Exportar o modelo como `modelo_demanda.pkl` com `joblib`
-- O Pedro integra substituindo a função no `ev_chargegrid.py`:
+O **scikit-learn** é uma biblioteca Python que aprenderá padrões a partir de dados reais da planilha SP2 (sessões por horário do dia) para treinar um modelo de regressão real. Esse modelo será exportado como `modelo_demanda.pkl` com a biblioteca `joblib` e acoplado no motor principal:
 
 ```python
 import joblib
@@ -183,75 +123,147 @@ modelo_ml = joblib.load("modelo_demanda.pkl")
 
 def ia_prever_demanda(hora: int) -> float:
     return float(modelo_ml.predict([[hora]])[0])
+
 ```
 
-**Entrega para Pedro:** Notebook de treinamento + arquivo `modelo_demanda.pkl` + breve análise dos resultados (gráfico de demanda prevista x real).
+---
+
+## 🤝 Tarefas Colaborativas
+
+### 🔵🔴 Autenticação e Criptografia — Raul + Luan
+
+**Status:** 🔄 Em andamento
+
+A autenticação precisa de backend e frontend funcionando juntos.
+
+* **Raul faz (backend):** Implementar verificação de identidade antes de liberar `iniciar_sessao()`. Criptografar os dados sensíveis do usuário (hash da placa ou token de sessão).
+* **Luan faz (frontend):** Tela de autenticação no Totem e no App (inserção de placa ou ID) e feedback visual claro de aprovação/rejeição coerente com o backend.
+* **Ponto de encontro obrigatório:** Combinar o contrato de dados (o que o backend retorna e como o frontend consome) antes de iniciar o desenvolvimento.
 
 ---
+
+### 🔵🟡 Integração com Base de Dados — Raul + Lucas
+
+**Status:** 🔄 Em andamento
+
+O banco `chargegrid.db` serve ao motor Python e ao chatbot de IA.
+
+* **Raul faz (backend):** Estruturar o `chargegrid.db`, fazer os `INSERTs` e `UPDATEs` nas funções de sessão do motor principal e criar uma função de leitura segura.
+* **Lucas faz (IA/chatbot):** Adaptar a função `buscar_contexto()` do chatbot para consultar o arquivo `.db` e responder dinamicamente sobre o estado do sistema.
+* **Ponto de encontro obrigatório:** Raul define e compartilha o schema exato da tabela antes de Lucas escrever as queries do chatbot.
+
+---
+
+### 🟢🟡 Chatbot RAG com Base de Dados Excel — Kevin + Lucas
+
+**Status:** 🔄 Em andamento
+
+Substituição de dados mocados por dados reais extraídos da planilha de análise histórica.
+
+* **Kevin faz (dados):** Processar a planilha Excel, extrair as métricas comerciais mais relevantes e fornecer o arquivo limpo estruturado (CSV ou JSON).
+* **Lucas faz (chatbot):** Alimentar a base de conhecimento do RAG com os dados tratados do Kevin e atualizar o gerador de testes `resultados_testes_sprint3.json`.
+* **Ponto de encontro obrigatório:** Definir previamente o formato de intercâmbio de dados (ex: JSON estruturado).
+
+---
+
+## 👤 Tarefas Individuais
+
+### 🔵 Raul — Módulo de Faturamento + Gateway de Pagamentos
+
+**Status:** 📋 Para fazer | *Iniciar após: Autenticação e Banco de Dados*
+
+* Substituir o `print()` textual do recibo no terminal por uma chamada de API real para o **Mercado Pago Sandbox**.
+* Validar a confirmação de sucesso do pagamento antes de fechar a sessão no posto e registrar a transação no banco de dados.
+
+### 🔴 Luan — Dashboard de Monitoramento em Tempo Real
+
+**Status:** 📋 Para fazer | *Pode iniciar: Em paralelo*
+
+* Desenvolver um dashboard visual em HTML/React (ou equivalente) que leia o arquivo `chargegrid.db` e apresente graficamente as métricas geradas em tempo real pela função `painel_operacional()`.
+
+### 🔴 Luan — Protótipos de Tela — Totem + App + QR Pix
+
+**Status:** 📋 Para fazer | *Pode iniciar: Imediatamente*
+
+* Construir os fluxos navegáveis de interface (Figma ou front estático) mapeando a jornada do usuário final no posto (boas-vindas -> login -> carregamento -> pagamento por QR Code).
+
+### 🟢 Kevin — IA Preditiva Real — Substituição do Dicionário por ML
+
+**Status:** ⏳ Backlog | *Iniciar após: Parte do RAG com Lucas estar encaminhada*
+
+* Treinar o modelo preditivo no `scikit-learn` utilizando os horários de pico reais da planilha SP2, exportar o arquivo `.pkl` e gerar o gráfico comparativo de acurácia.
 
 ### 🟡 Lucas — Chatbot: Integração com Dados em Tempo Real
-**Status:** Backlog  
-**Após concluir:** RAG com Kevin + banco do Raul estar funcional
 
-Esta é a etapa final do chatbot — depois que o RAG com Excel e o banco de dados estiverem prontos.
+**Status:** ⏳ Backlog | *Iniciar após: Banco de dados do Raul estar funcional*
 
-**O que fazer:**
-- Conectar o chatbot ao banco de dados do Raul para responder sobre o estado atual do sistema em tempo real
-- Exemplos de perguntas que devem funcionar: *"Qual carregador está ocupado agora?"*, *"Qual o faturamento de hoje?"*, *"Tem algum carregador em manutenção?"*
-- Atualizar o `SYSTEM_PROMPT` se necessário para refletir os dados reais
+* Etapa final da IA. Conectar a inteligência do chatbot para responder perguntas dinâmicas do operador sobre o faturamento do dia ou estações ocupadas direto do banco de dados.
 
-**Entrega para Pedro:** Chatbot respondendo perguntas com dados do banco em tempo real + JSON de testes atualizado.
+### ⚪ Pedro — Apresentação e Integração Final do Projeto
 
----
+**Status:** ⏳ Backlog | *Inicia quando: Módulos principais integrados*
 
-### Pedro — Apresentação Final do Projeto
-**Status:** Backlog  
-**Inicia:** Quando os demais módulos estiverem integrados
-
-**O que fazer:**
-- Integrar todos os módulos recebidos dos membros no repositório final
-- Gravar o vídeo de demonstração da solução completa (substituindo o vídeo parcial atual)
-- Consolidar slides de apresentação cobrindo: problema, solução, arquitetura, demonstração, resultados
-- Submeter o projeto conforme os critérios do EV Challenge 2026
+* Consolidar todas as frentes no repositório principal, rodar testes de estresse de integração, montar os slides e gravar o vídeo demonstrativo final do ecossistema funcionando de ponta a ponta.
 
 ---
 
-## Status Consolidado
+## 📊 Status Consolidado do Kanban
 
-| Card | Responsáveis | Tipo | Status |
-|------|-------------|------|--------|
-| Sistema Base Python | Time | Conjunto | ✅ Concluído |
-| DLB — Balanceamento Dinâmico | Time | Conjunto | ✅ Concluído |
-| Simulação Protocolo OCPP | Time | Conjunto | ✅ Concluído |
-| Análise Comercial (planilha SP2) | Kevin | Individual | ✅ Concluído |
-| Documentação técnica | Pedro | Individual | ✅ Concluído |
-| Vídeo de demonstração parcial | Pedro | Individual | ✅ Concluído |
-| 🔵🔴 Autenticação e Criptografia | Raul + Luan | Colaborativa | 🔄 Em andamento |
-| 🔵🟡 Integração com Base de Dados | Raul + Lucas | Colaborativa | 🔄 Em andamento |
-| 🟢🟡 Chatbot RAG com Excel | Kevin + Lucas | Colaborativa | 🔄 Em andamento |
-| 🔵 Faturamento + Gateway | Raul | Individual | 📋 Para fazer |
-| 🔴 Dashboard em Tempo Real | Luan | Individual | 📋 Para fazer |
-| 🔴 Protótipos Totem + App + QR | Luan | Individual | 📋 Para fazer |
-| 🟢 IA Preditiva Real (ML) | Kevin | Individual | ⏳ Backlog |
-| 🟡 Chatbot com Dados em Tempo Real | Lucas | Individual | ⏳ Backlog |
-| Apresentação Final | Pedro | Individual | ⏳ Backlog |
-
----
-
-## Regra de Entrega 
-
-Cada integrante entrega ao Pedro **antes do prazo final**:
-
-| O que entregar | Formato |
-|----------------|---------|
-| O arquivo produzido | `.py`, `.ipynb`, `.pkl`, `.html`, `.fig` ou similar |
-| Evidência de funcionamento | Print, vídeo curto (30s), log ou screenshot |
-| Instruções de integração | O que o Pedro precisa saber para encaixar sem quebrar o que já existe |
-
-> Tarefa colaborativa = os dois membros entregam juntos, já integrados entre si.  
-> Pedro não integra partes separadas de uma tarefa colaborativa — ela chega pronta.
+| Card | Tipo | Responsáveis | Status |
+| --- | --- | --- | --- |
+| Sistema Base Python (`ev_chargegrid.py`) | Conjunto | Time | ✅ Concluído |
+| DLB — Balanceamento Dinâmico de Carga | Conjunto | Time | ✅ Concluído |
+| Simulação Protocolo OCPP 1.6J | Conjunto | Time | ✅ Concluído |
+| Análise Comercial Base (planilha SP2) | Individual | Kevin | ✅ Concluído |
+| Documentação técnica | Individual | Pedro | ✅ Concluído |
+| Vídeo de demonstração parcial | Individual | Pedro | ✅ Concluído |
+| 🔵🔴 Autenticação e Criptografia | Colaborativa | Raul + Luan | 🔄 Em andamento |
+| 🔵🟡 Integração com Base de Dados | Colaborativa | Raul + Lucas | 🔄 Em andamento |
+| 🟢🟡 Chatbot RAG com Excel | Colaborativa | Kevin + Lucas | 🔄 Em andamento |
+| 🔵 Faturamento + Gateway de Pagamentos | Individual | Raul | 📋 Para fazer |
+| 🔴 Dashboard de Monitoramento em Tempo Real | Individual | Luan | 📋 Para fazer |
+| 🔴 Protótipos de Tela — Totem + App + QR Pix | Individual | Luan | 📋 Para fazer |
+| 🟢 IA Preditiva Real (ML) | Individual | Kevin | ⏳ Backlog |
+| 🟡 Chatbot com Dados em Tempo Real | Individual | Lucas | ⏳ Backlog |
+| Apresentação Final do Projeto | Individual | Pedro | ⏳ Backlog |
 
 ---
 
-> *Atualizar este documento sempre que um card mudar de coluna no Trello.*  
-> *Versão: Sprint 3 — 14 dias restantes*
+## 🔗 Dependências Críticas entre Módulos
+
+```
+Raul cria o banco (chargegrid.db)
+    ├── Lucas pode conectar o chatbot ao banco
+    ├── Luan pode consumir os dados no dashboard
+    └── Kevin pode usar o histórico para melhorar o modelo ML
+
+Kevin processa a planilha SP2
+    └── Lucas pode substituir os 12 documentos estáticos no RAG
+
+Raul + Luan concluem a autenticação
+    └── Luan finaliza os protótipos de tela com o fluxo completo
+
+Lucas conclui o RAG com Excel (com Kevin)
+    └── Lucas avança para a integração com dados em tempo real
+
+```
+
+---
+
+## 📥 Regra de Entrega para o Integrador (Pedro)
+
+Cada integrante/dupla deve submeter sua entrega contendo obrigatoriamente:
+
+1. **📁 Arquivo produzido:** Código limpo e componentizado (`.py`, `.ipynb`, `.pkl`, `.html`, etc.).
+2. **🎥 Evidência de funcionamento:** Printscreen detalhado ou vídeo curto demonstrando a execução bem-sucedida.
+3. **📋 Instruções de integração:** Notas técnicas explicativas sobre o que muda para as outras frentes para evitar quebras de versão.
+
+> ⚠️ **Nota:** Tarefas colaborativas devem ser entregues pela dupla **já unificadas e testadas**. O líder receberá apenas módulos funcionais de ponta a ponta.
+
+---
+
+*Este documento deve ser atualizado pelo M1 sempre que um card mudar de status no Trello.*
+
+```
+
+```
