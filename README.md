@@ -93,6 +93,8 @@ A partir daí, o arquivo `chargegrid.db` passa a ser a fonte de verdade do siste
 | `chargegrid.db` | Sessões em tempo real geradas pelo sistema | Raul, Lucas, Kevin, Luan | Tudo que precisa refletir o estado atual do sistema |
 
 ---
+Por que duas fontes? O SQLite responde o agora — vaga livre, consumo ativo, status do carregador. O Excel responde o histórico — receita por mês, pico de demanda, ROI. Separar as camadas operacional e estratégica é o que transforma o chatbot em ferramenta de decisão real, não só um painel de texto.
+
 
 ### O que são os 12 documentos estáticos do Sprint 2
 
