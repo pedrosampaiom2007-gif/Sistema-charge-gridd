@@ -2,7 +2,7 @@
 
 > Referência central de ownership para todos os integrantes.  
 > Atualizado pelo líder do projeto (Pedro) a cada sprint.  
-> EV Challenge 2026 — GoodWe / FIAP | **14 dias restantes**
+> EV Challenge 2026 — GoodWe / FIAP | 
 
 ---
 
