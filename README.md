@@ -1,79 +1,194 @@
-# ChargeGrid Intelligence (CGI) — Core Engine
-> **Plataforma de Gestão Comercial de Recarga para Veículos Elétricos (EV)**
-> *GoodWe Challenge — FIAP (Sprint 2 & 3)*
+# ChargeGrid Intelligence — Documento de Responsabilidades do Projeto
 
-Este repositório contém o **motor principal (Core Backend)** do sistema ChargeGrid Intelligence. Desenvolvido em Python, este script centraliza todas as regras de negócio comerciais, simula o comportamento de um ecossistema de postos públicos/privados de alto fluxo (shoppings, aeroportos e frotas) e serve como a fundação arquitetural para as próximas evoluções do projeto.
-
----
-
-##  Contexto do Projeto (Escopo Comercial)
-Diferente de soluções residenciais ou condominiais (focadas em apenas um veículo e sem rateio complexo), o ChargeGrid Intelligence foi projetado para ambientes **comerciais de alto fluxo**, suportando:
-* **Múltiplos usuários independentes** por sessão simultaneamente.
-* **Autenticação segura** por placa ou ID de usuário via aplicativo.
-* **Faturamento individualizado** (Billing) por sessão de recarga.
-* **Tarifação dinâmica** inteligente baseada em horário, demanda local e congestionamento.
-* **Dynamic Load Balancing (DLB)** automatizado para proteção da infraestrutura elétrica.
-* **Protocolo OCPP 1.6J** integrado via simulação de mensagens JSON com o Central System.
+> Referência central de ownership para todos os integrantes.  
+> Atualizado pelo líder do projeto (M1) a cada sprint.  
+> EV Challenge 2026 — GoodWe / FIAP
 
 ---
 
-## 🚀 Como o Sistema Funciona Hoje
+## Equipe
 
-O script atual simula um cenário real com um limite de demanda contratada (`50.0 kW`) compartilhado por até `10 estações` de recarga simultâneas. O sistema opera baseado em 4 pilares técnicos principais:
+| Sigla | Integrante | RM | Função no Projeto |
+|-------|------------|----|-------------------|
+| M1 | Pedro Sampaio Mochnacs Arruda | RM 573522 | Líder, coordenador e integrador final |
+| M2 | Luan de Araujo Carneiro | RM 573691 | Backend — banco de dados, autenticação e pagamentos |
+| M3 | Raul Sampaio Mochnacs Arruda | RM 573523 | IA e Chatbot — RAG, LLM e integração de dados |
+| M4 | Lucas Garcia de Britto | RM 571768 | Frontend e UI — dashboard, protótipos e telas |
+| M5 | Kevin Rodrigues de Melo | RM 571777 | Dados e ML — análise comercial e IA preditiva |
 
-1.  **Gestão de Sessões Comerciais (`SessaoRecarga`):** Cada sessão é isolada, possui identificação única do usuário (placa ou ID do app), registra consumo acumulado (kWh) e exige um método de pagamento para faturamento individual.
-2.  **DLB (Dynamic Load Balancing) Automático:** A função `balancear_carga()` monitora as estações ativas e redistribui a potência disponível de forma igualitária, garantindo que a demanda contratada com a concessionária de energia nunca seja ultrapassada, evitando multas e quedas de energia.
-3.  **OCPP 1.6J Simulador:** Todas as ações críticas (início de recarga, envio de telemetria e encerramento) geram payloads estruturados no padrão JSON seguindo o protocolo oficial de recarga de EVs (`StartTransaction`, `MeterValues`, `StopTransaction`).
-4.  **Tarifação Dinâmica por IA Inteligente:** O preço do kWh flutua dinamicamente com base em três camadas sobrepostas na função `ia_calcular_tarifa()`:
-    * Horário de pico comercial (Almoço às 12h e saída do trabalho entre 18h e 20h).
-    * Congestionamento local (Ocupação de 3 ou mais estações simultâneas).
-    * Fator preditivo de demanda histórica (Simulando uma IA que já conhece os hábitos de consumo do local).
-
----
-
-##  Instruções de Execução
-
-Para rodar o simulador interativo e validar o comportamento do sistema no terminal:
-
-1.  Certifique-se de ter o Python 3.10 ou superior instalado na sua máquina.
-2.  Baixe o arquivo principal do código (`ev_chargegrid.py`).
-3.  Abra o terminal na pasta do arquivo e execute o comando:
-    ```bash
-    python ev_chargegrid.py
-    ```
-4.  O sistema iniciará rodando automaticamente uma **Demonstração Comercial**, provando o funcionamento em tempo real do DLB e da Tarifação dinâmica em 4 cenários comuns de um shopping center.
-5.  Após o término da demo, utilize o **Menu Interativo** no terminal para simular novas entradas de clientes, passagens de tempo de recarga (+30 min) e encerramento com emissão de recibos comerciais.
+> Preencha ou ajuste a coluna "Integrante" conforme a etiqueta de cor de cada membro no Trello.
 
 ---
 
-##  Roadmap de Evolução Arquitetural (Alterações Futuras)
+## Visão Geral do Projeto
 
-** IMPORTANTE PARA O TIME:** À medida que o projeto avançar e o quadro do Trello evoluir, este código estático servirá de base e sofrerá alterações modulares. Abaixo estão mapeados os pontos exatos onde cada membro deverá injetar suas implementações:
+O ChargeGrid Intelligence é uma plataforma de gestão comercial de eletropostos para alto fluxo.  
+A solução final integra cinco componentes desenvolvidos em paralelo pelos membros da equipe:
 
-### 1. Persistência e Banco de Dados
-* **Responsável:** M2 (Backend)
-* **Onde mudar no código:** A lista em memória `estacoes: list[SessaoRecarga]` deve ser descontinuada.
-* **Alteração futura:** As funções `iniciar_sessao()`, `simular_tempo()` e `encerrar_sessao()` deverão realizar queries estruturadas de `INSERT` e `UPDATE` diretamente em um banco de dados relacional ou NoSQL para manter o histórico de consumo seguro e persistente.
+```
+Motor Backend (Python)
+    ├── Banco de Dados e Autenticação    → M2
+    ├── Gateway de Pagamentos            → M2
+    ├── Tarifação Dinâmica por IA/ML     → M5
+    └── Protocolo OCPP 1.6J              ✓ Concluído
 
-### 2. Integração com Gateway de Pagamento Real
-* **Responsável:** M2 (Backend)
-* **Onde mudar no código:** A função `encerrar_sessao()`.
-* **Alteração futura:** Em vez de apenas imprimir o valor textual do recibo em tela, a função deverá disparar uma requisição de API para um ambiente de testes externo (Stripe ou Mercado Pago Sandbox) para validar a cobrança real do usuário antes de liberar a vaga do posto.
+Chatbot IA (Ollama / LangChain)
+    ├── RAG com base de dados Excel      → M3
+    └── Integração com dados em tempo real → M3
 
-### 3. Substituição por IA Preditiva de Machine Learning
-* **Responsável:** M5 (Cientista de Dados)
-* **Onde mudar no código:** A função `ia_prever_demanda()` e o dicionário estático `DEMANDA_PREVISTA_POR_HORA`.
-* **Alteração futura:** Remover o dicionário fixo e carregar um modelo preditivo real gerado via `scikit-learn` (treinado com a base de dados histórica de 60 sessões da SP2). O script passará a ler um arquivo serializado `.pkl` ou `.onnx` para prever os picos de demanda com precisão estatística.
+Interface Visual
+    ├── Dashboard de Monitoramento       → M4
+    └── Protótipos (Totem + App + QR)   → M4
 
-### 4. Conexão com Chatbot RAG
-* **Responsável:** M3 (Engenheiro de IA)
-* **Onde mudar no código:** Criação de rotas de leitura ou exportação de logs automatizada.
-* **Alteração futura:** O pipeline construído em LangChain consumirá os dados de logs e relatórios gerados por este simulador para que o assistente virtual (Llama 3.2) consiga responder perguntas de negócio em tempo real para os gestores (ex: *"Qual o faturamento acumulado agora no posto?"*).
-
-### 5. Consumo de Dados pelo Dashboard Web
-* **Responsável:** M4 (Designer UI / Frontend)
-* **Onde mudar no código:** Saída de dados da função `painel_operacional()`.
-* **Alteração futura:** A função deixará de exibir informações apenas textuais no terminal e passará a enviar os dados de potência ativa do DLB e receita acumulada via API REST ou WebSockets para alimentar graficamente os dashboards visuais desenvolvidos no front-end.
+Coordenação e Entrega Final             → M1
+```
 
 ---
-*Nota: Este documento deve ser atualizado pelo Product Owner (PO) do grupo sempre que uma nova integração de módulo for concluída com sucesso.*
+
+## Responsabilidades por Integrante
+
+### M1 —  Integrador (Pedro)
+
+**Função:** Coordenar as entregas, integrar os módulos desenvolvidos pelos membros e consolidar o material final para apresentação e submissão.
+
+| # | Tarefa | Status | Observação |
+|---|--------|--------|------------|
+| 1 | Coordenação geral e acompanhamento do Kanban | Contínuo | Atualizações semanais no Trello |
+| 2 | Revisão e integração dos módulos entregues | Contínuo | Verificar compatibilidade entre partes |
+| 3 | Atualização dos READMEs do repositório | Contínuo | Este documento é responsabilidade do M1 |
+| 4 | Apresentação Final do Projeto | Backlog | Consolidar vídeo, slides e demo integrada |
+
+**O que M1 recebe dos outros membros para integrar:**
+- M2: módulo de autenticação funcional + script de banco de dados + integração gateway
+- M3: chatbot atualizado com RAG conectado à planilha e dados do sistema
+- M4: dashboard funcional + protótipos navegáveis
+- M5: modelo ML serializado (.pkl) + análise comercial final
+
+---
+
+### M2 — Backend (Raul)
+
+**Função:** Implementar a camada de persistência de dados, autenticação segura e integração com gateway de pagamento no `ev_chargegrid.py`.
+
+| # | Tarefa | Status | Ponto de integração no código |
+|---|--------|--------|-------------------------------|
+| 1 | Módulo de Autenticação e Criptografia | Em andamento | Novo módulo — autenticar usuário antes de `iniciar_sessao()` |
+| 2 | Integração com Base de Dados | Em andamento | Substituir lista `estacoes[]` por queries de INSERT/UPDATE |
+| 3 | Módulo de Faturamento + Gateway de Pagamentos | Para fazer | Substituir `print()` do recibo por chamada à API do Mercado Pago Sandbox |
+
+**Entrega para M1:**
+- Arquivo `ev_chargegrid.py` atualizado com os três módulos integrados
+- Script SQL ou schema de banco de dados utilizado
+- Evidência de teste do gateway (screenshot ou log da chamada sandbox)
+
+**Dependências:**
+- M5 precisa que o banco de dados exista para persistir o histórico de sessões que alimentará o modelo ML
+
+---
+
+### M3 — IA e Chatbot (Lucas)
+
+**Função:** Evoluir o chatbot do Sprint 2 para consumir dados reais do sistema e responder perguntas de negócio em tempo real.
+
+| # | Tarefa | Status | Observação |
+|---|--------|--------|------------|
+| 1 | Evolução do Chatbot IA: RAG com Base de Dados Excel | Em andamento | Substituir documentos estáticos pela planilha `Trabalho_Analise_Comercial_SP2.xlsx` |
+| 2 | Integração do Chatbot com Dados em Tempo Real | Backlog | Consumir logs/saídas do `ev_chargegrid.py` via M2 |
+
+> **Atenção:** Os cards "Evolução do Chatbot RAG" e "Integração com Dados em Tempo Real" são etapas sequenciais da mesma entrega — não trabalhos diferentes. O segundo só começa depois que M2 tiver o banco de dados funcionando.
+
+**Entrega para M1:**
+- Notebook atualizado com RAG conectado à planilha Excel
+- Versão final do chatbot respondendo perguntas com dados reais do sistema
+- JSON de resultados de testes atualizado (`resultados_testes_sprint3.json`)
+
+**Dependências:**
+- Etapa 2 depende do banco de dados do M2 estar funcional
+
+---
+
+### M4 — Frontend e UI (Luan)
+
+**Função:** Criar a interface visual do sistema — dashboard operacional e protótipos das telas de atendimento ao usuário final.
+
+| # | Tarefa | Status | Observação |
+|---|--------|--------|------------|
+| 1 | Dashboard de Monitoramento em Tempo Real | Para fazer | Consumir dados da função `painel_operacional()` do `ev_chargegrid.py` |
+| 2 | Protótipos de Tela — Totem + App + QR Pix | Para fazer | Interface do usuário final no posto de recarga |
+
+**Entrega para M1:**
+- Dashboard funcional (HTML/React ou equivalente) com dados do sistema
+- Protótipos navegáveis das telas (Figma, HTML ou similar)
+- Evidência de que o dashboard consome dados reais ou simulados do backend
+
+**Dependências:**
+- Dashboard depende da função `painel_operacional()` do M2 expor dados via API ou exportação
+- Protótipos de tela são independentes e podem ser desenvolvidos em paralelo agora
+
+---
+
+### M5 — Dados e ML (Kevin)
+
+**Função:** Elevar a inteligência do sistema com análise comercial real e modelo de IA preditiva treinado com os dados históricos do projeto.
+
+| # | Tarefa | Status | Observação |
+|---|--------|--------|------------|
+| 1 | Análise Comercial Base (planilha SP2) | Concluído ✓ | Integrada ao sistema como base de dados |
+| 2 | IA Preditiva Real — substituir dicionário por modelo ML | Backlog | Treinar com os dados da planilha; exportar como `.pkl` |
+
+**Onde integrar no código:**  
+Substituir `DEMANDA_PREVISTA_POR_HORA` e a função `ia_prever_demanda()` em `ev_chargegrid.py` por carregamento do modelo serializado:
+```python
+import joblib
+modelo_ml = joblib.load("modelo_demanda.pkl")
+
+def ia_prever_demanda(hora: int) -> float:
+    return modelo_ml.predict([[hora]])[0]
+```
+
+**Entrega para M1:**
+- Notebook de treinamento do modelo (scikit-learn)
+- Arquivo `modelo_demanda.pkl` pronto para importação no `ev_chargegrid.py`
+- Análise comercial final consolidada (métricas de faturamento, pico de demanda, ROI estimado)
+
+**Dependências:**
+- Quanto mais dados reais o M2 tiver no banco, melhor o modelo. Para o prazo atual, treinar com os dados da planilha SP2 é suficiente.
+
+---
+
+## Status Consolidado do Kanban
+
+| Card | Responsável | Status |
+|------|-------------|--------|
+| Sistema Base Python (`ev_chargegrid.py`) | M1 + Time | ✅ Concluído |
+| DLB — Balanceamento Dinâmico de Carga | M1 + Time | ✅ Concluído |
+| Simulação Protocolo OCPP 1.6J | M1 + Time | ✅ Concluído |
+| Análise Comercial Base (planilha SP2) | M5 | ✅ Concluído |
+| Documentação técnica | M1 | ✅ Concluído |
+| Vídeo de demonstração parcial | M1 | ✅ Concluído |
+| Módulo de Autenticação e Criptografia | M2 | 🔄 Em andamento |
+| Integração com Base de Dados | M2 | 🔄 Em andamento |
+| Evolução do Chatbot IA — RAG + Excel | M3 | 🔄 Em andamento |
+| Módulo de Faturamento + Gateway | M2 | 📋 Para fazer |
+| Dashboard de Monitoramento em Tempo Real | M4 | 📋 Para fazer |
+| Protótipos de Tela — Totem + App + QR Pix | M4 | 📋 Para fazer |
+| IA Preditiva Real (ML) | M5 | ⏳ Backlog |
+| Chatbot: Integração com Dados em Tempo Real | M3 | ⏳ Backlog (etapa 2 do RAG) |
+| Apresentação Final do Projeto | M1 | ⏳ Backlog |
+
+---
+
+## Regra de Entrega para o M1
+
+Cada integrante entrega ao M1:
+
+1. **O arquivo modificado ou criado** (código, notebook, protótipo, modelo)
+2. **Uma evidência de funcionamento** (print, vídeo curto, log, screenshot)
+3. **O que o próximo módulo precisa saber** para integrar sem quebrar o que já existe
+
+Sem esses três itens, a entrega não está pronta para integração.
+
+---
+
+> *Este documento deve ser atualizado pelo M1 sempre que um card mudar de status no Trello.*  
+> *Versão atual: Sprint 3 — 14 dias restantes*
