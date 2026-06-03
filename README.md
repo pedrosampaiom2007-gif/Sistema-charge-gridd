@@ -182,7 +182,7 @@ Autenticação precisa de backend e frontend ao mesmo tempo. O Raul faz a lógic
 ---
 
 ### 🔵🟡 Integração com Base de Dados — Raul + Lucas
-**Status:** Em andamento,, Já pode iniciar
+**Status:** Em andamento, Já pode iniciar
 
 O banco `chargegrid.db` serve a dois módulos: o motor Python do Raul e o chatbot do Lucas. A divisão garante que um não bloqueie o outro.
 
@@ -203,7 +203,7 @@ O banco `chargegrid.db` serve a dois módulos: o motor Python do Raul e o chatbo
 ---
 
 ### 🟢🟡 Chatbot RAG com Base de Dados Excel — Kevin + Lucas
-**Status:** Em andamento,, Já pode iniciar
+**Status:** Em andamento, Já pode iniciar
 
 Kevin domina os dados e sabe o que a planilha contém. Lucas domina o pipeline do chatbot. Juntos substituem os 12 documentos estáticos por dados reais da planilha SP2.
 
