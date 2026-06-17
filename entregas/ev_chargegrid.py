@@ -8,7 +8,8 @@ Módulos Inseridos pelo Backend (Raul Sampaio):
   - Mascaramento de dados sensíveis em conformidade com diretrizes de privacidade.
   - Gateway de Pagamentos Integrado (Simulação Mercado Pago Sandbox API).
 
-Ajustes adicionais:
+Ajustes adicionais (Sprint 3 — resolvidos a pedido do Pedro, sem custo e sem
+complexidade extra):
   - Campo `data_sessao` na tabela `sessoes`, pra dar suporte a perguntas
     como "faturamento de hoje" (antes só existia hora_inicio, sem dia).
   - Pagamento Sandbox simplificado: por padrão roda 100% simulado local
@@ -32,10 +33,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 # ─── Constantes do sistema ────────────────────────────────────────────────────
-MAX_ESTACOES = 10  # pontos de recarga no estabelecimento comercial
-LIMITE_POTENCIA_GRID = 50.0  # kW — demanda contratada com a concessionária
-MAX_POTENCIA_ESTACAO = 22.0  # kW — limite por carregador AC (Tipo 2)
-TARIFA_BASE_KWH = 0.90  # R$/kWh — tarifa base comercial
+MAX_ESTACOES          = 10      # pontos de recarga no estabelecimento comercial
+LIMITE_POTENCIA_GRID  = 50.0    # kW — demanda contratada com a concessionária
+MAX_POTENCIA_ESTACAO  = 22.0    # kW — limite por carregador AC (Tipo 2)
+TARIFA_BASE_KWH       = 0.90    # R$/kWh — tarifa base comercial
 
 # Flag de configuração do gateway de pagamento.
 # Mantida em False por padrão: não exige cadastro externo, não gera custo
@@ -46,8 +47,8 @@ USAR_API_REAL_MERCADOPAGO = False
 
 # ─── IA: histórico de demanda por hora (padrão de uso comercial) ──────────────
 DEMANDA_PREVISTA_POR_HORA = {
-    0: 0.05, 1: 0.03, 2: 0.03, 3: 0.03, 4: 0.05, 5: 0.10,
-    6: 0.20, 7: 0.45, 8: 0.70, 9: 0.80, 10: 0.85, 11: 0.90,
+     0: 0.05,  1: 0.03,  2: 0.03,  3: 0.03,  4: 0.05,  5: 0.10,
+     6: 0.20,  7: 0.45,  8: 0.70,  9: 0.80, 10: 0.85, 11: 0.90,
     12: 1.00, 13: 0.85, 14: 0.80, 15: 0.85, 16: 0.90, 17: 0.95,
     18: 1.00, 19: 1.00, 20: 0.95, 21: 0.80, 22: 0.55, 23: 0.25,
 }
@@ -60,33 +61,33 @@ class SessaoRecarga:
     Representa uma sessão ativa em um ponto de recarga comercial.
     [RAUL]: Adicionado o campo id_sessao_db para vinculação relacional direta com o SQLite.
     """
-    id_estacao: int
-    id_usuario: str = "LIVRE"  # Placa mascarada do motorista
-    ativa: bool = False
-    potencia_kw: float = 0.0
-    kwh_consumidos: float = 0.0
-    hora_inicio: int = 0
-    valor_sessao: float = 0.0
-    metodo_pagamento: str = "---"  # PIX, Cartão, App, QR Code
-    id_sessao_db: Optional[int] = None  # FK ID do SQLite para updates em tempo real
+    id_estacao:      int
+    id_usuario:      str   = "LIVRE"   # Placa mascarada do motorista
+    ativa:           bool  = False
+    potencia_kw:     float = 0.0
+    kwh_consumidos:  float = 0.0
+    hora_inicio:     int   = 0
+    valor_sessao:    float = 0.0
+    metodo_pagamento: str  = "---"     # PIX, Cartão, App, QR Code
+    id_sessao_db:    Optional[int] = None  # FK ID do SQLite para updates em tempo real
 
     def encerrar(self):
-        self.id_usuario = "LIVRE"
-        self.ativa = False
-        self.potencia_kw = 0.0
-        self.kwh_consumidos = 0.0
-        self.hora_inicio = 0
-        self.valor_sessao = 0.0
+        self.id_usuario       = "LIVRE"
+        self.ativa            = False
+        self.potencia_kw      = 0.0
+        self.kwh_consumidos   = 0.0
+        self.hora_inicio      = 0
+        self.valor_sessao     = 0.0
         self.metodo_pagamento = "---"
-        self.id_sessao_db = None
+        self.id_sessao_db     = None
 
 
 # ─── Estado do sistema ────────────────────────────────────────────────────────
 estacoes: list[SessaoRecarga] = [
     SessaoRecarga(id_estacao=i + 1) for i in range(MAX_ESTACOES)
 ]
-receita_total: float = 0.0
-consumo_total_diario: float = 0.0
+receita_total:         float = 0.0
+consumo_total_diario:  float = 0.0
 
 
 # ─── MÓDULO BACKEND: SEGURANÇA E PERSISTÊNCIA (RAUL) ──────────────────────────
@@ -95,7 +96,6 @@ def gerar_hash_placa(placa: str) -> str:
     """Gera o hash criptográfico SHA-256 para anonimização de dados da placa."""
     return hashlib.sha256(placa.strip().upper().encode('utf-8')).hexdigest()
 
-
 def mascarar_id(uid: str) -> str:
     """Aplica máscara de privacidade corporativa (ex: ABC1D23 -> ABC**23)"""
     uid_clean = uid.strip().upper()
@@ -103,12 +103,11 @@ def mascarar_id(uid: str) -> str:
         return f"{uid_clean[:3]}**{uid_clean[-2:]}"
     return f"{uid_clean}**"
 
-
 def inicializar_banco():
     """Cria o arquivo físico chargegrid.db e popula tabelas base e usuários de teste."""
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
-
+    
     # Tabela de Controle de Acesso Corporativo
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -117,7 +116,7 @@ def inicializar_banco():
             status TEXT DEFAULT 'ATIVO'
         )
     """)
-
+    
     # Tabela Histórica e Operacional de Sessões em Tempo Real
     # [AJUSTE SPRINT 3]: coluna data_sessao adicionada — sem ela não era
     # possível separar "faturamento de hoje" de "faturamento acumulado".
@@ -125,7 +124,7 @@ def inicializar_banco():
         CREATE TABLE IF NOT EXISTS sessoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             id_estacao INTEGER,
-            id_usuario_mascarado TEXT,
+            usuario TEXT,
             data_sessao TEXT,
             hora_inicio INTEGER,
             kwh_consumidos REAL DEFAULT 0.0,
@@ -135,7 +134,7 @@ def inicializar_banco():
             ativa INTEGER DEFAULT 1
         )
     """)
-
+    
     # Usuários Semente (Seeds) para simulação e validação do sistema
     usuarios_teste = [
         (gerar_hash_placa("ABC1D23"), "Cliente Executivo A"),
@@ -144,10 +143,9 @@ def inicializar_banco():
         (gerar_hash_placa("DEF7M01"), "Usuário Demo D")
     ]
     cursor.executemany("INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)", usuarios_teste)
-
+    
     conn.commit()
     conn.close()
-
 
 def validar_usuario(id_usuario: str) -> bool:
     """Camada de Segurança: Valida via Hash se a credencial existe e está ativa."""
@@ -158,7 +156,6 @@ def validar_usuario(id_usuario: str) -> bool:
     resultado = cursor.fetchone()
     conn.close()
     return resultado is not None and resultado[0] == 'ATIVO'
-
 
 def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     """
@@ -176,7 +173,6 @@ def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     cadastrou = cursor.rowcount > 0
     conn.close()
     return cadastrou
-
 
 def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
     """
@@ -219,7 +215,6 @@ def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
         "transacao_id": transacao_id,
     }
 
-
 def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
     """
     [AJUSTE SPRINT 3]: Efetiva a baixa financeira no banco (status PAGO,
@@ -249,7 +244,7 @@ def listar_sessoes_ativas() -> list[dict]:
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id_estacao, id_usuario_mascarado, kwh_consumidos, valor_sessao, metodo_pagamento
+        SELECT id_estacao, usuario, kwh_consumidos, valor_sessao, metodo_pagamento
         FROM sessoes
         WHERE ativa = 1
     """)
@@ -257,7 +252,6 @@ def listar_sessoes_ativas() -> list[dict]:
     resultado = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
     conn.close()
     return resultado
-
 
 def obter_status_estacoes() -> dict:
     """
@@ -271,7 +265,6 @@ def obter_status_estacoes() -> dict:
         n: ("Ocupada" if n in ativas else "Livre")
         for n in range(1, MAX_ESTACOES + 1)
     }
-
 
 def obter_faturamento_dia(data: Optional[str] = None) -> float:
     """
@@ -289,7 +282,6 @@ def obter_faturamento_dia(data: Optional[str] = None) -> float:
     total = cursor.fetchone()[0]
     conn.close()
     return round(total, 2)
-
 
 def contar_sessoes_dia(data: Optional[str] = None) -> int:
     """Conta quantas sessões foram iniciadas no dia informado. Uso: chatbot."""
@@ -314,7 +306,6 @@ def ia_prever_demanda(hora: int) -> float:
     """Retorna fator de ocupação previsto para a hora (0.0 a 1.0)."""
     return DEMANDA_PREVISTA_POR_HORA.get(hora, 0.5)
 
-
 def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
     """
     Tarifa dinâmica comercial — três camadas:
@@ -338,7 +329,6 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
 # ─── DLB — Dynamic Load Balancing ─────────────────────────────────────────────
 def contar_ativas() -> int:
     return sum(1 for e in estacoes if e.ativa)
-
 
 def balancear_carga() -> None:
     """
@@ -371,11 +361,11 @@ def simular_tempo() -> None:
     for e in estacoes:
         if not e.ativa:
             continue
-        fator = ia_calcular_tarifa(e.hora_inicio, n)
-        energia = e.potencia_kw * 0.5
-        e.kwh_consumidos += energia
+        fator              = ia_calcular_tarifa(e.hora_inicio, n)
+        energia            = e.potencia_kw * 0.5
+        e.kwh_consumidos  += energia
         consumo_total_diario += energia
-        e.valor_sessao = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
+        e.valor_sessao     = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
 
         # [RAUL]: Sincroniza o consumo acumulado em tempo real no banco sqlite
         cursor.execute("""
@@ -385,12 +375,12 @@ def simular_tempo() -> None:
         """, (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db))
 
         ocpp_enviar("MeterValues", e.id_estacao, {
-            "usuario": e.id_usuario,
-            "potenciaKw": round(e.potencia_kw, 2),
-            "leituraKwh": round(e.kwh_consumidos, 2),
-            "valorSessao": e.valor_sessao,
-            "fatorTarifa": fator,
-            "iaDemanda": ia_prever_demanda(e.hora_inicio),
+            "usuario":      e.id_usuario,
+            "potenciaKw":   round(e.potencia_kw, 2),
+            "leituraKwh":   round(e.kwh_consumidos, 2),
+            "valorSessao":  e.valor_sessao,
+            "fatorTarifa":  fator,
+            "iaDemanda":    ia_prever_demanda(e.hora_inicio),
         })
 
     conn.commit()
@@ -404,15 +394,12 @@ def iniciar_sessao() -> None:
     try:
         idx = int(input()) - 1
     except ValueError:
-        print("[ERRO] Entrada inválida.");
-        return
+        print("[ERRO] Entrada inválida."); return
 
     if not (0 <= idx < MAX_ESTACOES):
-        print("[ERRO] Estação inexistente.");
-        return
+        print("[ERRO] Estação inexistente."); return
     if estacoes[idx].ativa:
-        print("[ERRO] Estação ocupada.");
-        return
+        print("[ERRO] Estação ocupada."); return
 
     print("ID do usuário (digite uma placa cadastrada ex: ABC1D23): ", end="")
     uid = input().strip().upper() or "ANONIMO"
@@ -441,7 +428,7 @@ def iniciar_sessao() -> None:
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO sessoes (id_estacao, id_usuario_mascarado, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
+        INSERT INTO sessoes (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
         VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
     """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento))
     id_gerado_db = cursor.lastrowid
@@ -449,22 +436,22 @@ def iniciar_sessao() -> None:
     conn.close()
 
     e = estacoes[idx]
-    e.id_usuario = uid_mascarado
-    e.hora_inicio = hora
-    e.ativa = True
+    e.id_usuario       = uid_mascarado
+    e.hora_inicio      = hora
+    e.ativa            = True
     e.metodo_pagamento = pagamento
-    e.id_sessao_db = id_gerado_db  # Aloca a PK recebida do banco
+    e.id_sessao_db     = id_gerado_db  # Aloca a PK recebida do banco
 
     demanda = ia_prever_demanda(hora)
-    fator = ia_calcular_tarifa(hora, contar_ativas())
-    print(f"\n[OK] Sessão iniciada — Estação {idx + 1} | ID Registro DB: #{id_gerado_db}")
-    print(f"[IA] Demanda prevista para {hora}h: {demanda * 100:.0f}% | Tarifa: R$ {TARIFA_BASE_KWH * fator:.2f}/kWh")
+    fator   = ia_calcular_tarifa(hora, contar_ativas())
+    print(f"\n[OK] Sessão iniciada — Estação {idx+1} | ID Registro DB: #{id_gerado_db}")
+    print(f"[IA] Demanda prevista para {hora}h: {demanda*100:.0f}% | Tarifa: R$ {TARIFA_BASE_KWH * fator:.2f}/kWh")
 
     ocpp_enviar("StartTransaction", e.id_estacao, {
-        "status": "Connected",
-        "usuario": uid_mascarado,
-        "pagamento": pagamento,
-        "iaDemanda": demanda,
+        "status":       "Connected",
+        "usuario":      uid_mascarado,
+        "pagamento":    pagamento,
+        "iaDemanda":    demanda,
         "tarifaInicial": round(TARIFA_BASE_KWH * fator, 2),
     })
     balancear_carga()
@@ -478,12 +465,10 @@ def encerrar_sessao() -> None:
     try:
         idx = int(input()) - 1
     except ValueError:
-        print("[ERRO] Entrada inválida.");
-        return
+        print("[ERRO] Entrada inválida."); return
 
     if not (0 <= idx < MAX_ESTACOES) or not estacoes[idx].ativa:
-        print("[ERRO] Estação inativa ou inexistente.");
-        return
+        print("[ERRO] Estação inativa ou inexistente."); return
 
     e = estacoes[idx]
 
@@ -491,9 +476,9 @@ def encerrar_sessao() -> None:
     print(f"\n[GATEWAY] Gerando ordem de pagamento no Mercado Pago Sandbox...")
     cobranca = criar_pagamento_sandbox(e.valor_sessao, e.id_sessao_db)
 
-    print(f"\n{'=' * 54}")
+    print(f"\n{'='*54}")
     print(f"   RECIBO DE RECARGA COMERCIAL — ChargeGrid Intelligence")
-    print(f"{'=' * 54}")
+    print(f"{'='*54}")
     print(f"  Estação:     #{e.id_estacao:02d}")
     print(f"  Usuário:     {e.id_usuario}")
     print(f"  Consumo:     {e.kwh_consumidos:.2f} kWh")
@@ -502,7 +487,7 @@ def encerrar_sessao() -> None:
     print(f"  URL Pix/Checkout Sandbox:")
     print(f"  {cobranca['url']}")
     print(f"  ID da transação: {cobranca['transacao_id']}")
-    print(f"{'=' * 54}")
+    print(f"{'='*54}")
 
     # [RAUL]: Confirmação lógica de transação bem sucedida via terminal
     input("\n[MERCADO PAGO] Pressione [ENTER] após o motorista concluir o pagamento...")
@@ -515,12 +500,12 @@ def encerrar_sessao() -> None:
     receita_total += e.valor_sessao
 
     ocpp_enviar("StopTransaction", e.id_estacao, {
-        "status": "Disconnected",
-        "usuario": e.id_usuario,
-        "consumoKwh": round(e.kwh_consumidos, 2),
-        "valorFinal": e.valor_sessao,
-        "pagamento": e.metodo_pagamento,
-        "financeiro": "APROVADO_MERCADOPAGO"
+        "status":      "Disconnected",
+        "usuario":     e.id_usuario,
+        "consumoKwh":  round(e.kwh_consumidos, 2),
+        "valorFinal":  e.valor_sessao,
+        "pagamento":   e.metodo_pagamento,
+        "financeiro":  "APROVADO_MERCADOPAGO"
     })
     e.encerrar()
     balancear_carga()
@@ -532,25 +517,25 @@ def painel_operacional() -> None:
     hora_atual = datetime.datetime.now().hour
     demanda_agora = ia_prever_demanda(hora_atual)
 
-    print(f"\n{'=' * 65}")
+    print(f"\n{'='*65}")
     print(f"  ChargeGrid Intelligence — Painel Operacional Comercial")
     print(f"  {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}  |  "
-          f"IA: demanda prevista {demanda_agora * 100:.0f}% para {hora_atual}h")
-    print(f"{'=' * 65}")
+          f"IA: demanda prevista {demanda_agora*100:.0f}% para {hora_atual}h")
+    print(f"{'='*65}")
     print(f"  {'EST':<5} {'STATUS':<8} {'USUÁRIO':<14} {'kW':>6} {'kWh':>8} {'VALOR':>10} {'PAGT':<8}")
-    print(f"  {'-' * 60}")
+    print(f"  {'-'*60}")
     for e in estacoes:
         st = "Ocupada" if e.ativa else "Livre"
         print(f"  {e.id_estacao:02d}    {st:<8} {e.id_usuario:<14} "
               f"{e.potencia_kw:>5.1f}  {e.kwh_consumidos:>7.2f}  "
               f"R$ {e.valor_sessao:>6.2f}  {e.metodo_pagamento:<8}")
-    print(f"  {'-' * 60}")
+    print(f"  {'-'*60}")
     pot_total = sum(e.potencia_kw for e in estacoes if e.ativa)
     print(f"  Ativas: {n}/{MAX_ESTACOES} | "
           f"Potência: {pot_total:.1f}/{LIMITE_POTENCIA_GRID:.0f} kW | "
           f"Consumo dia: {consumo_total_diario:.2f} kWh | "
           f"Receita: R$ {receita_total:.2f}")
-    print(f"{'=' * 65}")
+    print(f"{'='*65}")
 
 
 # ─── Cenário de demonstração comercial ───────────────────────────────────────
@@ -569,18 +554,18 @@ def demonstracao_comercial() -> None:
         conn = sqlite3.connect("chargegrid.db")
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO sessoes (id_estacao, id_usuario_mascarado, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
+            INSERT INTO sessoes (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
             VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
         """, (idx + 1, uid_m, data_hoje, hora, pgto))
         id_db = cursor.lastrowid
         conn.commit()
         conn.close()
 
-        estacoes[idx].id_usuario = uid_m
-        estacoes[idx].hora_inicio = hora
-        estacoes[idx].ativa = True
+        estacoes[idx].id_usuario       = uid_m
+        estacoes[idx].hora_inicio      = hora
+        estacoes[idx].ativa            = True
         estacoes[idx].metodo_pagamento = pgto
-        estacoes[idx].id_sessao_db = id_db
+        estacoes[idx].id_sessao_db     = id_db
 
     print("\n[CENA 1] Cliente 1 conecta (12h — horário de almoço, pico)")
     setup(0, "ABC1D23", 12, "PIX")
@@ -621,8 +606,8 @@ def demonstracao_comercial() -> None:
 
     for i in range(4):
         estacoes[i].encerrar()
-    receita_total = 0.0
-    consumo_total_diario = 0.0
+    receita_total         = 0.0
+    consumo_total_diario  = 0.0
     print("\n--- FIM DA DEMONSTRAÇÃO ---")
 
 
@@ -649,19 +634,13 @@ def main() -> None:
         try:
             op = int(input())
         except ValueError:
-            print("[ERRO] Opção inválida.");
-            continue
+            print("[ERRO] Opção inválida."); continue
 
-        if op == 1:
-            iniciar_sessao()
-        elif op == 2:
-            simular_tempo()
-        elif op == 3:
-            encerrar_sessao()
-        elif op == 4:
-            painel_operacional()
-        elif op == 5:
-            demonstracao_comercial()
+        if   op == 1: iniciar_sessao()
+        elif op == 2: simular_tempo()
+        elif op == 3: encerrar_sessao()
+        elif op == 4: painel_operacional()
+        elif op == 5: demonstracao_comercial()
         elif op == 6:
             print("Placa: ", end="")
             placa_nova = input().strip()
@@ -676,11 +655,8 @@ def main() -> None:
             print(f"[LEITURA] Status das estações: {obter_status_estacoes()}")
             print(f"[LEITURA] Faturamento hoje: R$ {obter_faturamento_dia():.2f}")
             print(f"[LEITURA] Sessões hoje: {contar_sessoes_dia()}")
-        elif op == 8:
-            print("\n  Sistema encerrado.\n"); break
-        else:
-            print("[ERRO] Opção inválida.")
-
+        elif op == 8: print("\n  Sistema encerrado.\n"); break
+        else:         print("[ERRO] Opção inválida.")
 
 if __name__ == "__main__":
     main()
