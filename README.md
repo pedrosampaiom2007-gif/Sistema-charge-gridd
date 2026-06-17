@@ -156,7 +156,7 @@ documentos = [
 
 São 12 frases digitadas na mão que simulam o que o sistema "sabe". O problema: são dados inventados e nunca mudam.
 
-**No Sprint 3, essas 12 frases são substituídas por `dados_rag.json`** — o arquivo que o Kevin entrega (prazo 24/06) processando a planilha SP2 em texto estruturado. O Lucas substitui a lista fixa por esse arquivo (prazo 11/07), e o chatbot passa a responder com dados verdadeiros, tanto históricos (via `dados_rag.json`) quanto em tempo real (via as 4 funções do Raul).
+**Agora, essas 12 frases são substituídas por `dados_rag.json`** — o arquivo que o Kevin entrega (prazo 24/06) processando a planilha SP2 em texto estruturado. O Lucas substitui a lista fixa por esse arquivo (prazo 11/07), e o chatbot passa a responder com dados verdadeiros, tanto históricos (via `dados_rag.json`) quanto em tempo real (via as 4 funções do Raul).
 
 ---
 
@@ -185,7 +185,7 @@ def ia_prever_demanda(hora: int) -> float:
 
 ---
 
-## Entregas por Integrante — Sprint 3 (com prazos)
+## Entregas por Integrante —  (com prazos)
 
 ### 🔵 Raul — Sem tarefas pendentes ✅
 
