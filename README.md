@@ -4,7 +4,7 @@
 > Atualizado pelo líder do projeto (Pedro) a cada sprint.
 > EV Challenge 2026 — GoodWe / FIAP
 
-**Sprint atual:** 3 — Integração com dados reais
+Integração com dados reais
 **Prazo final de entrega:** meados de agosto de 2026. Quanto antes estiver pronto, melhor — os prazos abaixo são o limite máximo de cada entrega, não a meta.
 
 ---
