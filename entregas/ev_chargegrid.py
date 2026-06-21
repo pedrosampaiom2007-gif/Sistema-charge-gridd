@@ -2,25 +2,21 @@
 ChargeGrid Intelligence — Plataforma de Gestão Comercial de Recarga EV
 GoodWe Challenge - Sprint 3
 
-Módulos Inseridos pelo Backend (Raul Sampaio):
+Módulos entregues pelo Backend (Raul Sampaio):
   - Banco de Dados SQLite (chargegrid.db) integrado com persistência ao vivo.
   - Autenticação de Placas via Criptografia Hash (SHA-256).
-  - Mascaramento de dados sensíveis em conformidade com diretrizes de privacidade.
+  - Mascaramento de dados sensíveis em conformidade com LGPD.
   - Gateway de Pagamentos Integrado (Simulação Mercado Pago Sandbox API).
+  - 4 funções de leitura prontas para Lucas (chatbot) e Luan (dashboard).
 
-Ajustes adicionais (Sprint 3 — resolvidos a pedido do Pedro, sem custo e sem
-complexidade extra):
-  - Campo `data_sessao` na tabela `sessoes`, pra dar suporte a perguntas
-    como "faturamento de hoje" (antes só existia hora_inicio, sem dia).
-  - Pagamento Sandbox simplificado: por padrão roda 100% simulado local
-    (sem precisar de credencial real, sem custo, sem travar em timeout de
-    rede). Pode ser ligado para tentar a API real depois, via flag.
-  - Cadastro dinâmico de usuário (placa), pra permitir testar com placas
-    novas durante a demonstração sem editar o banco manualmente.
-  - Funções de leitura prontas (listar_sessoes_ativas, obter_status_estacoes,
-    obter_faturamento_dia, contar_sessoes_dia) — exatamente o que o README
-    pedia pro Raul disponibilizar pra Lucas e Luan consumirem sem precisar
-    escrever SQL ou tocar no motor principal.
+Correções aplicadas pelo Pedro (integração Sprint 3):
+  - Import de `requests` agora é seguro: o módulo só é necessário se
+    USAR_API_REAL_MERCADOPAGO = True. Com a flag em False (padrão), o sistema
+    roda sem internet e sem instalar requests. Antes, um ImportError aqui
+    travava o sistema inteiro mesmo sem usar a API.
+  - Marcação clara do ponto de integração do modelo ML do Kevin
+    (função ia_prever_demanda), para facilitar a substituição do dicionário
+    fixo pelo modelo_demanda.pkl na entrega de 07/07.
 """
 
 import json
@@ -28,9 +24,17 @@ import datetime
 import sqlite3
 import hashlib
 import uuid
-import requests
 from dataclasses import dataclass
 from typing import Optional
+
+# requests só é necessário se USAR_API_REAL_MERCADOPAGO = True.
+# Com a flag em False (padrão), o sistema não faz chamada de rede e
+# não precisa do pacote instalado.
+try:
+    import requests
+    _REQUESTS_DISPONIVEL = True
+except ImportError:
+    _REQUESTS_DISPONIVEL = False
 
 # ─── Constantes do sistema ────────────────────────────────────────────────────
 MAX_ESTACOES          = 10      # pontos de recarga no estabelecimento comercial
@@ -39,13 +43,27 @@ MAX_POTENCIA_ESTACAO  = 22.0    # kW — limite por carregador AC (Tipo 2)
 TARIFA_BASE_KWH       = 0.90    # R$/kWh — tarifa base comercial
 
 # Flag de configuração do gateway de pagamento.
-# Mantida em False por padrão: não exige cadastro externo, não gera custo
-# e não depende de internet para a demonstração funcionar. Se o time
-# conseguir credenciais reais de Sandbox do Mercado Pago, basta trocar
-# para True.
+# False por padrão: sem credencial externa, sem custo, sem internet.
+# Para ativar a API real do Mercado Pago Sandbox, trocar para True e
+# substituir o token mock pelo Access Token real (TEST-...) obtido em
+# developers.mercadopago.com (conta gratuita).
 USAR_API_REAL_MERCADOPAGO = False
 
-# ─── IA: histórico de demanda por hora (padrão de uso comercial) ──────────────
+# ─── IA: previsão de demanda por hora ─────────────────────────────────────────
+# PONTO DE INTEGRAÇÃO DO MODELO ML (Kevin — prazo 07/07)
+# ─────────────────────────────────────────────────────────────────────────────
+# Este dicionário será substituído pelo modelo_demanda.pkl do Kevin.
+# Quando o arquivo chegar, Pedro comenta o dicionário e ativa o bloco abaixo:
+#
+#   import joblib
+#   _modelo_ml = joblib.load("modelo_demanda.pkl")
+#
+# E substitui a função ia_prever_demanda por:
+#
+#   def ia_prever_demanda(hora: int) -> float:
+#       return float(_modelo_ml.predict([[hora]])[0])
+#
+# Até lá, o dicionário abaixo mantém o sistema funcional com valores estimados.
 DEMANDA_PREVISTA_POR_HORA = {
      0: 0.05,  1: 0.03,  2: 0.03,  3: 0.03,  4: 0.05,  5: 0.10,
      6: 0.20,  7: 0.45,  8: 0.70,  9: 0.80, 10: 0.85, 11: 0.90,
@@ -59,17 +77,17 @@ DEMANDA_PREVISTA_POR_HORA = {
 class SessaoRecarga:
     """
     Representa uma sessão ativa em um ponto de recarga comercial.
-    [RAUL]: Adicionado o campo id_sessao_db para vinculação relacional direta com o SQLite.
+    id_sessao_db: FK para o SQLite, permite UPDATE em tempo real sem buscar pelo ID.
     """
-    id_estacao:      int
-    id_usuario:      str   = "LIVRE"   # Placa mascarada do motorista
-    ativa:           bool  = False
-    potencia_kw:     float = 0.0
-    kwh_consumidos:  float = 0.0
-    hora_inicio:     int   = 0
-    valor_sessao:    float = 0.0
-    metodo_pagamento: str  = "---"     # PIX, Cartão, App, QR Code
-    id_sessao_db:    Optional[int] = None  # FK ID do SQLite para updates em tempo real
+    id_estacao:       int
+    id_usuario:       str            = "LIVRE"
+    ativa:            bool           = False
+    potencia_kw:      float          = 0.0
+    kwh_consumidos:   float          = 0.0
+    hora_inicio:      int            = 0
+    valor_sessao:     float          = 0.0
+    metodo_pagamento: str            = "---"
+    id_sessao_db:     Optional[int]  = None
 
     def encerrar(self):
         self.id_usuario       = "LIVRE"
@@ -93,62 +111,63 @@ consumo_total_diario:  float = 0.0
 # ─── MÓDULO BACKEND: SEGURANÇA E PERSISTÊNCIA (RAUL) ──────────────────────────
 
 def gerar_hash_placa(placa: str) -> str:
-    """Gera o hash criptográfico SHA-256 para anonimização de dados da placa."""
+    """SHA-256 da placa — nunca armazenamos a placa em texto claro."""
     return hashlib.sha256(placa.strip().upper().encode('utf-8')).hexdigest()
 
+
 def mascarar_id(uid: str) -> str:
-    """Aplica máscara de privacidade corporativa (ex: ABC1D23 -> ABC**23)"""
+    """Máscara de privacidade LGPD: ABC1D23 → ABC**23."""
     uid_clean = uid.strip().upper()
     if len(uid_clean) >= 5:
         return f"{uid_clean[:3]}**{uid_clean[-2:]}"
     return f"{uid_clean}**"
 
+
 def inicializar_banco():
-    """Cria o arquivo físico chargegrid.db e popula tabelas base e usuários de teste."""
+    """Cria chargegrid.db com as tabelas e usuários semente. Idempotente."""
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
-    
-    # Tabela de Controle de Acesso Corporativo
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             hash_usuario TEXT PRIMARY KEY,
-            nome TEXT,
-            status TEXT DEFAULT 'ATIVO'
+            nome         TEXT,
+            status       TEXT DEFAULT 'ATIVO'
         )
     """)
-    
-    # Tabela Histórica e Operacional de Sessões em Tempo Real
-    # [AJUSTE SPRINT 3]: coluna data_sessao adicionada — sem ela não era
-    # possível separar "faturamento de hoje" de "faturamento acumulado".
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_estacao INTEGER,
-            usuario TEXT,
-            data_sessao TEXT,
-            hora_inicio INTEGER,
-            kwh_consumidos REAL DEFAULT 0.0,
-            valor_sessao REAL DEFAULT 0.0,
-            metodo_pagamento TEXT,
-            status_pagamento TEXT DEFAULT 'PENDENTE',
-            ativa INTEGER DEFAULT 1
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_estacao         INTEGER,
+            usuario            TEXT,
+            data_sessao        TEXT,
+            hora_inicio        INTEGER,
+            kwh_consumidos     REAL    DEFAULT 0.0,
+            valor_sessao       REAL    DEFAULT 0.0,
+            metodo_pagamento   TEXT,
+            status_pagamento   TEXT    DEFAULT 'PENDENTE',
+            ativa              INTEGER DEFAULT 1
         )
     """)
-    
-    # Usuários Semente (Seeds) para simulação e validação do sistema
+
     usuarios_teste = [
         (gerar_hash_placa("ABC1D23"), "Cliente Executivo A"),
         (gerar_hash_placa("XYZ9F88"), "Frota Corporativa B"),
         (gerar_hash_placa("GHI3K45"), "Cliente Shopping C"),
-        (gerar_hash_placa("DEF7M01"), "Usuário Demo D")
+        (gerar_hash_placa("DEF7M01"), "Usuário Demo D"),
     ]
-    cursor.executemany("INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)", usuarios_teste)
-    
+    cursor.executemany(
+        "INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)",
+        usuarios_teste
+    )
+
     conn.commit()
     conn.close()
 
+
 def validar_usuario(id_usuario: str) -> bool:
-    """Camada de Segurança: Valida via Hash se a credencial existe e está ativa."""
+    """Valida via hash SHA-256 se a placa está cadastrada e ativa."""
     hash_busca = gerar_hash_placa(id_usuario)
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
@@ -157,36 +176,36 @@ def validar_usuario(id_usuario: str) -> bool:
     conn.close()
     return resultado is not None and resultado[0] == 'ATIVO'
 
+
 def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     """
-    [AJUSTE SPRINT 3]: Permite registrar uma placa nova autorizada em tempo
-    real, sem precisar editar o banco manualmente. Útil pra testar o fluxo
-    de autenticação com uma placa diferente das 4 sementes durante a demo
-    ou a apresentação final.
-    Retorna True se cadastrou um usuário novo, False se já existia.
+    Registra uma placa nova em tempo real sem editar o banco manualmente.
+    Útil na demonstração para testar placas além das 4 sementes.
+    Retorna True se cadastrou novo, False se já existia.
     """
     hash_novo = gerar_hash_placa(placa)
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)", (hash_novo, nome))
+    cursor.execute(
+        "INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)",
+        (hash_novo, nome)
+    )
     conn.commit()
     cadastrou = cursor.rowcount > 0
     conn.close()
     return cadastrou
 
+
 def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
     """
     Gera a cobrança da sessão.
-    [AJUSTE SPRINT 3]: por padrão (USAR_API_REAL_MERCADOPAGO=False) monta uma
-    simulação local consistente — sem custo, sem internet, sem credencial
-    externa. Só tenta a API real do Mercado Pago se a flag estiver ligada
-    (e mesmo assim cai no fallback se a chamada falhar).
-    Retorna um dicionário {'url': ..., 'transacao_id': ...} — formato estável
-    pra quem for consumir isso (CLI hoje, dashboard/totem depois).
+    Com USAR_API_REAL_MERCADOPAGO=False (padrão): simulação local, sem custo,
+    sem internet. Com True: tenta a API real e cai no fallback se falhar.
+    Retorna {'url': ..., 'transacao_id': ...}.
     """
     transacao_id = f"SIM-{uuid.uuid4().hex[:10].upper()}"
 
-    if USAR_API_REAL_MERCADOPAGO:
+    if USAR_API_REAL_MERCADOPAGO and _REQUESTS_DISPONIVEL:
         url = "https://api.mercadopago.com/v1/payments"
         headers = {
             "Authorization": "Bearer TEST-8374928374982374-MOCK-TOKEN",
@@ -203,62 +222,57 @@ def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
             if response.status_code == 201:
                 dados = response.json()
                 return {
-                    "url": dados.get("point_of_interaction", {}).get("transaction_data", {}).get("ticket_url"),
+                    "url": dados.get("point_of_interaction", {})
+                               .get("transaction_data", {})
+                               .get("ticket_url"),
                     "transacao_id": dados.get("id", transacao_id),
                 }
         except Exception:
             pass
 
-    # Simulação local — comportamento padrão do projeto, sem custo nem dependência externa
     return {
         "url": f"https://www.mercadopago.com.br/sandbox/pay?simulation_id={transacao_id}",
         "transacao_id": transacao_id,
     }
 
+
 def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
     """
-    [AJUSTE SPRINT 3]: Efetiva a baixa financeira no banco (status PAGO,
-    sessão inativa). Separado da geração da cobrança de propósito — assim
-    outras interfaces (dashboard, totem) podem chamar só essa confirmação
-    quando o time construir isso, sem depender do input() de terminal que
-    a versão CLI usa.
+    Baixa financeira no banco: status PAGO, sessão inativa.
+    Isolada da geração da cobrança para que dashboard/totem possam chamar
+    só esta função ao confirmar o pagamento na interface visual.
     """
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE sessoes 
-        SET status_pagamento = 'PAGO', ativa = 0 
-        WHERE id = ?
-    """, (id_sessao_db,))
+    cursor.execute(
+        "UPDATE sessoes SET status_pagamento = 'PAGO', ativa = 0 WHERE id = ?",
+        (id_sessao_db,)
+    )
     conn.commit()
     conn.close()
 
 
-# ─── MÓDULO DE LEITURA — funções prontas para Lucas (chatbot) e Luan (dashboard) ──
-# [AJUSTE SPRINT 3]: isso é o que o README pedia e ainda não existia —
-# uma função de leitura que Lucas e Luan chamam sem escrever SQL nem
-# tocar no motor principal.
+# ─── MÓDULO DE LEITURA — API interna para Lucas (chatbot) e Luan (dashboard) ──
 
 def listar_sessoes_ativas() -> list[dict]:
-    """Retorna as sessões em andamento agora. Uso: chatbot e dashboard."""
+    """Retorna sessões em andamento agora. Uso: chatbot e dashboard."""
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
     cursor.execute("""
         SELECT id_estacao, usuario, kwh_consumidos, valor_sessao, metodo_pagamento
-        FROM sessoes
-        WHERE ativa = 1
+        FROM sessoes WHERE ativa = 1
     """)
     colunas = ["estacao", "usuario", "kwh", "valor", "pagamento"]
     resultado = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
     conn.close()
     return resultado
 
+
 def obter_status_estacoes() -> dict:
     """
-    Retorna o status (Livre/Ocupada) de todas as MAX_ESTACOES estações.
-    Resolve a lógica que antes cada consumidor teria que reimplementar:
-    o banco só tem linha pra sessão que começou, então "livre" é por
-    exclusão — aqui essa exclusão já vem pronta. Uso: dashboard.
+    Status Livre/Ocupada de todas as 10 estações.
+    A lógica de exclusão (livre = não está na tabela sessoes com ativa=1)
+    já vem resolvida aqui — ninguém precisa reimplementar.
     """
     ativas = {s["estacao"] for s in listar_sessoes_ativas()}
     return {
@@ -266,10 +280,11 @@ def obter_status_estacoes() -> dict:
         for n in range(1, MAX_ESTACOES + 1)
     }
 
+
 def obter_faturamento_dia(data: Optional[str] = None) -> float:
     """
-    Soma o valor de sessões PAGAS no dia informado (formato AAAA-MM-DD).
-    Sem o parâmetro, usa o dia de hoje. Uso: chatbot ("faturamento de hoje").
+    Soma das sessões PAGAS no dia informado (formato AAAA-MM-DD).
+    Sem parâmetro: usa hoje. Uso: chatbot ("faturamento de hoje").
     """
     data = data or datetime.date.today().isoformat()
     conn = sqlite3.connect("chargegrid.db")
@@ -283,8 +298,9 @@ def obter_faturamento_dia(data: Optional[str] = None) -> float:
     conn.close()
     return round(total, 2)
 
+
 def contar_sessoes_dia(data: Optional[str] = None) -> int:
-    """Conta quantas sessões foram iniciadas no dia informado. Uso: chatbot."""
+    """Sessões iniciadas no dia informado. Sem parâmetro: hoje. Uso: chatbot."""
     data = data or datetime.date.today().isoformat()
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
@@ -303,15 +319,20 @@ def ocpp_enviar(action: str, id_estacao: int, payload: dict) -> None:
 
 # ─── Módulo de IA ─────────────────────────────────────────────────────────────
 def ia_prever_demanda(hora: int) -> float:
-    """Retorna fator de ocupação previsto para a hora (0.0 a 1.0)."""
+    """
+    Retorna fator de ocupação previsto para a hora (0.0 a 1.0).
+    SUBSTITUIR pelo modelo_demanda.pkl do Kevin em 07/07 — ver comentário
+    no bloco DEMANDA_PREVISTA_POR_HORA acima.
+    """
     return DEMANDA_PREVISTA_POR_HORA.get(hora, 0.5)
+
 
 def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
     """
-    Tarifa dinâmica comercial — três camadas:
+    Tarifa dinâmica — três camadas:
       1. Horário de pico (12h e 18h–20h): +30%
-      2. Alta ocupação (≥3 estações): +15%
-      3. IA preditiva — demanda futura alta (≥90%): +20%
+      2. Alta ocupação (≥3 estações ativas): +15%
+      3. IA preditiva — demanda futura ≥90%: +20% | ≥75%: +10%
     """
     fator = 1.0
     if hora == 12 or 18 <= hora <= 20:
@@ -330,11 +351,9 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
 def contar_ativas() -> int:
     return sum(1 for e in estacoes if e.ativa)
 
+
 def balancear_carga() -> None:
-    """
-    Distribui a demanda contratada entre as estações ativas.
-    Garante que o limite da concessionária nunca seja ultrapassado.
-    """
+    """Distribui a demanda contratada entre estações ativas sem ultrapassar o limite."""
     n = contar_ativas()
     if n == 0:
         return
@@ -347,7 +366,7 @@ def balancear_carga() -> None:
 
 # ─── Simulação de passagem de tempo ───────────────────────────────────────────
 def simular_tempo() -> None:
-    """Avança +30 min, recalcula consumo e tarifas, emite MeterValues."""
+    """Avança +30 min, recalcula consumo e tarifas, emite MeterValues e grava no banco."""
     global consumo_total_diario
     n = contar_ativas()
     if n == 0:
@@ -367,20 +386,18 @@ def simular_tempo() -> None:
         consumo_total_diario += energia
         e.valor_sessao     = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
 
-        # [RAUL]: Sincroniza o consumo acumulado em tempo real no banco sqlite
-        cursor.execute("""
-            UPDATE sessoes 
-            SET kwh_consumidos = ?, valor_sessao = ? 
-            WHERE id = ?
-        """, (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db))
+        cursor.execute(
+            "UPDATE sessoes SET kwh_consumidos = ?, valor_sessao = ? WHERE id = ?",
+            (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db)
+        )
 
         ocpp_enviar("MeterValues", e.id_estacao, {
-            "usuario":      e.id_usuario,
-            "potenciaKw":   round(e.potencia_kw, 2),
-            "leituraKwh":   round(e.kwh_consumidos, 2),
-            "valorSessao":  e.valor_sessao,
-            "fatorTarifa":  fator,
-            "iaDemanda":    ia_prever_demanda(e.hora_inicio),
+            "usuario":    e.id_usuario,
+            "potenciaKw": round(e.potencia_kw, 2),
+            "leituraKwh": round(e.kwh_consumidos, 2),
+            "valorSessao": e.valor_sessao,
+            "fatorTarifa": fator,
+            "iaDemanda":  ia_prever_demanda(e.hora_inicio),
         })
 
     conn.commit()
@@ -401,13 +418,12 @@ def iniciar_sessao() -> None:
     if estacoes[idx].ativa:
         print("[ERRO] Estação ocupada."); return
 
-    print("ID do usuário (digite uma placa cadastrada ex: ABC1D23): ", end="")
+    print("ID do usuário (placa cadastrada, ex: ABC1D23): ", end="")
     uid = input().strip().upper() or "ANONIMO"
 
-    # [RAUL]: Validação de Segurança Criptográfica obrigatória em ambiente Comercial
     if uid != "ANONIMO" and not validar_usuario(uid):
-        print(f"[BLOQUEADO] Usuário com credencial '{uid}' não autorizado no estabelecimento.")
-        print("[DICA] Use uma das placas semente (ABC1D23, XYZ9F88, GHI3K45, DEF7M01) ou cadastre uma nova no menu.")
+        print(f"[BLOQUEADO] Credencial '{uid}' não autorizada.")
+        print("[DICA] Placas válidas: ABC1D23, XYZ9F88, GHI3K45, DEF7M01 — ou cadastre uma nova (opção 6).")
         return
 
     print("Horário de início (0–23): ", end="")
@@ -420,15 +436,14 @@ def iniciar_sessao() -> None:
     print("Método de pagamento (PIX / Cartao / App / QRCode): ", end="")
     pagamento = input().strip() or "App"
 
-    # [RAUL]: Aplicação de anonimização visual LGPD antes de persistir/exibir
     uid_mascarado = mascarar_id(uid)
-    data_hoje = datetime.date.today().isoformat()
+    data_hoje     = datetime.date.today().isoformat()
 
-    # [RAUL]: Gravação operacional inicial da sessão no SQLite
     conn = sqlite3.connect("chargegrid.db")
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO sessoes (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
+        INSERT INTO sessoes
+            (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
         VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
     """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento))
     id_gerado_db = cursor.lastrowid
@@ -440,18 +455,18 @@ def iniciar_sessao() -> None:
     e.hora_inicio      = hora
     e.ativa            = True
     e.metodo_pagamento = pagamento
-    e.id_sessao_db     = id_gerado_db  # Aloca a PK recebida do banco
+    e.id_sessao_db     = id_gerado_db
 
     demanda = ia_prever_demanda(hora)
     fator   = ia_calcular_tarifa(hora, contar_ativas())
-    print(f"\n[OK] Sessão iniciada — Estação {idx+1} | ID Registro DB: #{id_gerado_db}")
-    print(f"[IA] Demanda prevista para {hora}h: {demanda*100:.0f}% | Tarifa: R$ {TARIFA_BASE_KWH * fator:.2f}/kWh")
+    print(f"\n[OK] Sessão iniciada — Estação {idx+1} | ID DB: #{id_gerado_db}")
+    print(f"[IA] Demanda prevista {hora}h: {demanda*100:.0f}% | Tarifa: R$ {TARIFA_BASE_KWH * fator:.2f}/kWh")
 
     ocpp_enviar("StartTransaction", e.id_estacao, {
-        "status":       "Connected",
-        "usuario":      uid_mascarado,
-        "pagamento":    pagamento,
-        "iaDemanda":    demanda,
+        "status":        "Connected",
+        "usuario":       uid_mascarado,
+        "pagamento":     pagamento,
+        "iaDemanda":     demanda,
         "tarifaInicial": round(TARIFA_BASE_KWH * fator, 2),
     })
     balancear_carga()
@@ -472,8 +487,7 @@ def encerrar_sessao() -> None:
 
     e = estacoes[idx]
 
-    # [RAUL]: Dispara processamento financeiro (real ou simulado, conforme USAR_API_REAL_MERCADOPAGO)
-    print(f"\n[GATEWAY] Gerando ordem de pagamento no Mercado Pago Sandbox...")
+    print(f"\n[GATEWAY] Gerando ordem de pagamento...")
     cobranca = criar_pagamento_sandbox(e.valor_sessao, e.id_sessao_db)
 
     print(f"\n{'='*54}")
@@ -484,28 +498,22 @@ def encerrar_sessao() -> None:
     print(f"  Consumo:     {e.kwh_consumidos:.2f} kWh")
     print(f"  Valor Total: R$ {e.valor_sessao:.2f}")
     print(f"  Pagamento:   {e.metodo_pagamento}")
-    print(f"  URL Pix/Checkout Sandbox:")
-    print(f"  {cobranca['url']}")
-    print(f"  ID da transação: {cobranca['transacao_id']}")
+    print(f"  URL Checkout: {cobranca['url']}")
+    print(f"  Transação:   {cobranca['transacao_id']}")
     print(f"{'='*54}")
 
-    # [RAUL]: Confirmação lógica de transação bem sucedida via terminal
-    input("\n[MERCADO PAGO] Pressione [ENTER] após o motorista concluir o pagamento...")
+    input("\n[MERCADO PAGO] Pressione [ENTER] após o pagamento ser concluído...")
 
-    # [AJUSTE SPRINT 3]: confirmação isolada numa função própria — quando o
-    # dashboard/totem do Luan existir, ele chama confirmar_pagamento()
-    # direto, sem precisar desse input() de terminal.
     confirmar_pagamento(e.id_sessao_db)
-
     receita_total += e.valor_sessao
 
     ocpp_enviar("StopTransaction", e.id_estacao, {
-        "status":      "Disconnected",
-        "usuario":     e.id_usuario,
-        "consumoKwh":  round(e.kwh_consumidos, 2),
-        "valorFinal":  e.valor_sessao,
-        "pagamento":   e.metodo_pagamento,
-        "financeiro":  "APROVADO_MERCADOPAGO"
+        "status":     "Disconnected",
+        "usuario":    e.id_usuario,
+        "consumoKwh": round(e.kwh_consumidos, 2),
+        "valorFinal": e.valor_sessao,
+        "pagamento":  e.metodo_pagamento,
+        "financeiro": "APROVADO_MERCADOPAGO",
     })
     e.encerrar()
     balancear_carga()
@@ -514,7 +522,7 @@ def encerrar_sessao() -> None:
 # ─── Painel operacional ───────────────────────────────────────────────────────
 def painel_operacional() -> None:
     n = contar_ativas()
-    hora_atual = datetime.datetime.now().hour
+    hora_atual    = datetime.datetime.now().hour
     demanda_agora = ia_prever_demanda(hora_atual)
 
     print(f"\n{'='*65}")
@@ -547,14 +555,14 @@ def demonstracao_comercial() -> None:
     print("║  Simula estacionamento de shopping center    ║")
     print("╚══════════════════════════════════════════════╝")
 
-    # [RAUL]: Helper adaptado para popular o SQLite também durante a execução da Demo
     def setup(idx, uid, hora, pgto):
-        uid_m = mascarar_id(uid)
+        uid_m     = mascarar_id(uid)
         data_hoje = datetime.date.today().isoformat()
-        conn = sqlite3.connect("chargegrid.db")
-        cursor = conn.cursor()
+        conn      = sqlite3.connect("chargegrid.db")
+        cursor    = conn.cursor()
         cursor.execute("""
-            INSERT INTO sessoes (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
+            INSERT INTO sessoes
+                (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
             VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
         """, (idx + 1, uid_m, data_hoje, hora, pgto))
         id_db = cursor.lastrowid
@@ -585,18 +593,16 @@ def demonstracao_comercial() -> None:
     print("\n[CENA 4] Cliente 1 encerra — recibo emitido + DLB redistribui")
     receita_total += estacoes[0].valor_sessao
 
-    # Simula chamada financeira Mercado Pago (real ou simulada, conforme a flag)
     cobranca_demo = criar_pagamento_sandbox(estacoes[0].valor_sessao, estacoes[0].id_sessao_db)
-
     print(f"\n  RECIBO DEMO: {estacoes[0].id_usuario} | "
           f"{estacoes[0].kwh_consumidos:.2f} kWh | "
           f"R$ {estacoes[0].valor_sessao:.2f} via {estacoes[0].metodo_pagamento}")
-    print(f"  [MP SANDBOX LINK]: {cobranca_demo['url']} (transação {cobranca_demo['transacao_id']})")
+    print(f"  [SANDBOX]: {cobranca_demo['url']} (transação {cobranca_demo['transacao_id']})")
 
     confirmar_pagamento(estacoes[0].id_sessao_db)
 
     ocpp_enviar("StopTransaction", estacoes[0].id_estacao, {
-        "usuario": estacoes[0].id_usuario,
+        "usuario":    estacoes[0].id_usuario,
         "valorFinal": estacoes[0].valor_sessao,
     })
     estacoes[0].encerrar()
@@ -606,19 +612,19 @@ def demonstracao_comercial() -> None:
 
     for i in range(4):
         estacoes[i].encerrar()
-    receita_total         = 0.0
-    consumo_total_diario  = 0.0
+    receita_total        = 0.0
+    consumo_total_diario = 0.0
     print("\n--- FIM DA DEMONSTRAÇÃO ---")
 
 
 # ─── Menu principal ───────────────────────────────────────────────────────────
 def main() -> None:
-    # [RAUL]: Garante a construção do banco de dados na inicialização do sistema
     inicializar_banco()
 
     print("\n  ChargeGrid Intelligence — GoodWe Challenge")
     print("  Plataforma de Gestão Comercial de Recarga EV\n")
     demonstracao_comercial()
+
     while True:
         print("\n══════ ChargeGrid Intelligence — Gestão Comercial ══════")
         print("  1. Iniciar sessão de recarga")
@@ -627,7 +633,7 @@ def main() -> None:
         print("  4. Painel operacional")
         print("  5. Rodar demonstração comercial")
         print("  6. Cadastrar novo usuário (placa)")
-        print("  7. Ver leitura agregada (uso do chatbot/dashboard)")
+        print("  7. Ver leitura agregada (chatbot/dashboard)")
         print("  8. Sair")
         print("═══════════════════════════════════════════════════════")
         print("  Escolha: ", end="")
@@ -647,16 +653,19 @@ def main() -> None:
             print("Nome (opcional): ", end="")
             nome_novo = input().strip() or "Usuario Cadastrado"
             if cadastrar_usuario(placa_nova, nome_novo):
-                print(f"[OK] Usuário '{placa_nova}' cadastrado e autorizado.")
+                print(f"[OK] '{placa_nova}' cadastrado e autorizado.")
             else:
-                print(f"[INFO] Usuário '{placa_nova}' já estava cadastrado.")
+                print(f"[INFO] '{placa_nova}' já estava cadastrado.")
         elif op == 7:
-            print(f"\n[LEITURA] Sessões ativas: {listar_sessoes_ativas()}")
-            print(f"[LEITURA] Status das estações: {obter_status_estacoes()}")
-            print(f"[LEITURA] Faturamento hoje: R$ {obter_faturamento_dia():.2f}")
-            print(f"[LEITURA] Sessões hoje: {contar_sessoes_dia()}")
-        elif op == 8: print("\n  Sistema encerrado.\n"); break
-        else:         print("[ERRO] Opção inválida.")
+            print(f"\n[LEITURA] Sessões ativas:       {listar_sessoes_ativas()}")
+            print(f"[LEITURA] Status das estações:  {obter_status_estacoes()}")
+            print(f"[LEITURA] Faturamento hoje:     R$ {obter_faturamento_dia():.2f}")
+            print(f"[LEITURA] Sessões hoje:         {contar_sessoes_dia()}")
+        elif op == 8:
+            print("\n  Sistema encerrado.\n"); break
+        else:
+            print("[ERRO] Opção inválida.")
+
 
 if __name__ == "__main__":
     main()
