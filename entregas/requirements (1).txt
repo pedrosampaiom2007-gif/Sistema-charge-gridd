@@ -20,3 +20,10 @@ ipywidgets>=8.0.0
 
 # Dashboard Streamlit
 streamlit>=1.28.0
+
+# Pipeline de análise — necessário apenas para regenerar dados_rag.json a partir
+# da planilha SP2 (Trabalho_Analise_Comercial_SP2.xlsx) ou o notebook de treino do modelo.
+# Não é exigido para rodar o sistema, o chatbot ou o dashboard.
+pandas>=1.5.0
+matplotlib>=3.6.0
+openpyxl>=3.0.10
