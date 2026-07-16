@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ChargeGrid — Totem de Recarga</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div class="kiosk">
+
+  <div class="station-tag" id="station-tag">
+    <span class="dot"></span>
+    <span id="station-tag-text">Estação --</span>
+  </div>
+
+  <!-- 1. LIVRE -->
+  <div class="screen active" id="screen-livre">
+    <div class="eyebrow">ChargeGrid Intelligence</div>
+    <h1 class="headline">Estação disponível</h1>
+    <p class="sub">Toque no botão abaixo para iniciar sua recarga. O pagamento é feito ao final, via Pix, com base no consumo.</p>
+    <button class="btn-mega" id="btn-iniciar">Iniciar recarga</button>
+  </div>
+
+  <!-- 2. IDENTIFICAÇÃO -->
+  <div class="screen" id="screen-identificacao">
+    <div class="eyebrow">Passo 1 de 3</div>
+    <h1 class="headline">Identifique seu veículo</h1>
+    <p class="sub">Digite a placa cadastrada para liberar a recarga.</p>
+    <div class="field-kiosk">
+      <label for="f-placa">Placa</label>
+      <input id="f-placa" placeholder="ABC1D23" maxlength="8" autocomplete="off">
+    </div>
+    <div class="pagamento-opcoes" id="pagamento-opcoes">
+      <button class="pagamento-chip selecionado" data-metodo="PIX">Pix</button>
+      <button class="pagamento-chip" data-metodo="Cartao">Cartão</button>
+      <button class="pagamento-chip" data-metodo="App">App</button>
+      <button class="pagamento-chip" data-metodo="QRCode">QR Code</button>
+    </div>
+    <div class="error-kiosk" id="err-identificacao"></div>
+    <button class="btn-mega" id="btn-confirmar-placa">Confirmar e carregar</button>
+    <button class="btn-secundario" id="btn-voltar-1">Cancelar</button>
+  </div>
+
+  <!-- 3. CARREGANDO (sessão ativa ao vivo) -->
+  <div class="screen" id="screen-carregando">
+    <div class="eyebrow">Recarga em andamento</div>
+    <h1 class="headline" id="carregando-titulo">Carregando seu veículo</h1>
+    <div class="live-stats">
+      <div class="live-stat">
+        <div class="k">Tempo decorrido</div>
+        <div class="v" id="live-tempo">00:00</div>
+      </div>
+      <div class="live-stat">
+        <div class="k">Potência</div>
+        <div class="v" id="live-potencia">0<span class="unit">kW</span></div>
+      </div>
+      <div class="live-stat">
+        <div class="k">Consumido</div>
+        <div class="v" id="live-kwh">0.00<span class="unit">kWh</span></div>
+      </div>
+      <div class="live-stat">
+        <div class="k">Valor parcial</div>
+        <div class="v" id="live-valor">R$ 0,00</div>
+      </div>
+    </div>
+    <button class="btn-mega amber" id="btn-encerrar">Encerrar e pagar</button>
+  </div>
+
+  <!-- 4. PROCESSANDO PAGAMENTO -->
+  <div class="screen" id="screen-pagamento">
+    <div class="eyebrow">Passo 2 de 3</div>
+    <h1 class="headline">Escaneie para pagar via Pix</h1>
+    <div class="valor-cobrado" id="valor-cobrado">R$ 0,00</div>
+    <div class="qr-box" id="qr-box"></div>
+    <div class="status-linha" id="status-pagamento"><span class="spinner"></span> Aguardando confirmação do Pix...</div>
+  </div>
+
+  <!-- 5. RECIBO -->
+  <div class="screen" id="screen-recibo">
+    <div class="check-ok">✓</div>
+    <div class="eyebrow">Passo 3 de 3</div>
+    <h1 class="headline">Pagamento aprovado</h1>
+    <div class="recibo-box" id="recibo-box"></div>
+    <button class="btn-mega" id="btn-concluir">Concluir</button>
+  </div>
+
+  <div class="config-hint">estação definida via ?estacao=N na URL · atual: <span id="config-hint-n"></span></div>
+</div>
+
+<div class="toast-kiosk" id="toast-kiosk"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
