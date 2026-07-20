@@ -23,8 +23,14 @@ Como rodar:
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import datetime
+import os
+import sys
 import threading
 import time
+
+# ev_chargegrid.py mora em entregas/, uma pasta acima deste arquivo — sem
+# isso o import falha com ModuleNotFoundError quando rodado a partir daqui.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ev_chargegrid as cg
 
