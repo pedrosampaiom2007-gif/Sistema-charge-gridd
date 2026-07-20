@@ -1,91 +1,100 @@
-# ChargeGrid Intelligence — Responsabilidades do Projeto
-> EV Challenge 2026 — GoodWe / FIAP · Atualizado por Pedro Sampaio · Entrega final: meados de agosto/2026
+# ChargeGrid Intelligence
 
-> ⚠️ **O que falta de verdade, resumido:** só o `dashboard.py` + protótipos do Luan (14/07) e a integração final do Pedro (25/07). Todo o resto já está pronto e integrado.
+Sistema de gestão comercial de recarga de veículos elétricos, desenvolvido para o EV Challenge 2026 (GoodWe / FIAP). Cobre o ciclo completo de uma sessão de recarga comercial: autoatendimento no totem, cobrança via Pix simulado, painel operacional para o gestor, previsão de demanda por IA e um assistente conversacional que responde com dados reais do sistema.
 
-> 🔓 **Alterações e ideias:** qualquer integrante pode alterar, melhorar ou propor algo em qualquer arquivo já entregue. **Basta avisar o Pedro antes ou logo depois da alteração**, para manter este README e o Kanban coerentes com o que está rodando de verdade.
+## Visão geral
+
+O motor (`ev_chargegrid.py`) controla até 10 estações de recarga: autenticação de motorista por placa (hash SHA-256, com mascaramento em conformidade com a LGPD), balanceamento de carga entre estações ativas (DLB), tarifação dinâmica por horário e demanda, e pagamento via gateway simulado (Mercado Pago sandbox). Uma API Flask expõe esse motor para dois clientes web — o totem do motorista e o dashboard do gestor — e um notebook de chatbot consulta o mesmo banco de dados para responder perguntas em linguagem natural, combinando dados em tempo real com um histórico de 60 sessões reais.
+
+## Arquitetura
+
+```
+Totem (entregas/files/)                Dashboard (entregas/frontend/)
+        │  HTTP/JSON                            │  HTTP/JSON
+        └──────────────┐         ┌──────────────┘
+                        ▼         ▼
+              API Flask (entregas/files/api_server.py)
+                        │
+                        ▼
+         Motor (entregas/ev_chargegrid.py)
+                        │
+                        ▼
+      SQLite — entregas/chargegrid.db (CHARGEGRID_DB)
+                        ▲
+                        │  leitura direta (mesmas funções do motor)
+                        │
+        Chatbot (entregas/ChargeGrid_Intelligence_chatbot.ipynb)
+                        │
+                        ▼
+        Ollama local (llama3.2:3b) + dados_rag.json (histórico)
+```
+
+A previsão de demanda por IA (`modelo_demanda.pkl`, um RandomForest treinado com dados reais) não é um sistema à parte — ela é chamada de dentro do próprio motor (`ia_prever_demanda`), tanto na tarifação de cada sessão quanto na leitura que alimenta o gráfico de demanda do dashboard.
+
+O motor é a única fonte de verdade: API, dashboard, totem e chatbot leem dele (direta ou indiretamente) — nenhum desses componentes duplica lógica de negócio.
+
+## Estrutura do repositório
+
+```
+entregas/
+├── ev_chargegrid.py                    motor: banco, auth, pagamento, DLB, IA preditiva
+├── dados_rag.json                      histórico de 60 sessões reais (base do RAG do chatbot)
+├── modelo_demanda.pkl                  modelo RandomForest treinado (previsão de demanda)
+├── requirements (1).txt                dependências Python
+├── ChargeGrid_Intelligence_chatbot.ipynb   chatbot (roda no Google Colab)
+├── files/                              totem do motorista (self-service) + api_server.py
+│   ├── api_server.py                   camada Flask que expõe o motor via HTTP/JSON
+│   ├── index.html / app.js / style.css
+└── frontend/                           dashboard do gestor
+    └── index.html / app.js / style.css
+
+modelagem_ia/
+└── IA aplicada.zip                     notebook de treino do modelo + gráfico comparativo
+```
+
+## Como executar
+
+**1. API (backend):**
+```bash
+cd entregas/files
+pip install -r "../requirements (1).txt" flask flask-cors
+python api_server.py
+```
+Sobe em `http://localhost:5000`. Na primeira execução, popula o banco com 4 placas de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45`, `DEF7M01`).
+
+**2. Dashboard (gestor):** abra `entregas/frontend/index.html` no navegador, ou sirva com `python -m http.server 5500` dentro da pasta.
+
+**3. Totem (motorista):** abra `entregas/files/index.html` no navegador. Cada totem físico serve uma única estação: use `?estacao=3` na URL para escolher qual (padrão é a estação 1).
+
+Se a API rodar em outro host/porta, ajuste a constante `API_BASE` no topo de `app.js` (dashboard e totem).
+
+**4. Chatbot:** abra `ChargeGrid_Intelligence_chatbot.ipynb` no Google Colab (ele só roda lá — instala Ollama e depende de comandos específicos do Colab). Quando pedido, faça upload de `ev_chargegrid.py`, `dados_rag.json`, `modelo_demanda.pkl` e do `chargegrid.db` **atual** (o mesmo arquivo que a API gerou) — sem esse último, o chatbot responde só com o histórico, não com dados em tempo real.
+
+## Fluxo principal (totem → API → banco → dashboard → chatbot)
+
+1. Motorista inicia a sessão no totem → `POST /api/sessoes/iniciar` na API.
+2. A API valida a placa contra o banco e grava a sessão em `chargegrid.db`.
+3. O dashboard, que faz polling em `GET /api/painel` a cada poucos segundos, reflete a estação ocupada, o consumo e o valor acumulado.
+4. Ao encerrar (`POST /api/sessoes/<n>/encerrar`), a API gera a cobrança simulada, o totem mostra o QR Pix e emite o recibo.
+5. O chatbot, com o `chargegrid.db` atualizado, consulta as mesmas funções de leitura do motor e responde perguntas sobre o estado real do sistema — sem depender da API estar no ar no momento da pergunta.
+
+## O que já foi resolvido
+
+- Motor completo: banco SQLite, autenticação com hash, mascaramento LGPD, pagamento sandbox, balanceamento de carga.
+- Modelo de IA preditiva treinado com dados reais e integrado ao motor.
+- API Flask cobrindo todas as ações do motor (sessões, painel, KPIs, curva de demanda).
+- Dashboard e totem funcionais, testados ponta a ponta com dados reais passando pelo sistema.
+- Chatbot com roteador de tempo real (banco) vs. histórico (RAG), rodando com LLM local sem custo.
+- Correções de integração já validadas: função de leitura de potência por estação, remoção de uma cópia duplicada da API, caminho de importação do motor corrigido, e o banco SQLite unificado num único arquivo para todos os processos locais.
+
+## Limitações conhecidas
+
+- **Não rode o script de console (`python ev_chargegrid.py`) ao mesmo tempo que a API.** SQLite permite um escritor por vez; dois processos gravando ao mesmo instante podem gerar erro de "banco travado". Não é um bug do projeto — é uma característica do SQLite com múltiplos processos.
+- A opção 5 do menu de console (demonstração comercial) grava sessões de teste no mesmo banco usado pela API/dashboard/chatbot e não fecha todas (estações 2, 3 e 4 ficam marcadas como ocupadas). Se for usada, apague `entregas/chargegrid.db` antes de uma demonstração real.
+- `potencia_kw` de cada estação existe só na memória do processo da API — se ela reiniciar, as estações voltam a mostrar 0 kW até uma nova sessão começar (o histórico de kWh e valor no banco não é afetado).
+- O chatbot não enxerga o banco automaticamente: é preciso reenviar o `chargegrid.db` atual ao Colab sempre que quiser respostas com dados em tempo real atualizados.
+- `requirements (1).txt` não inclui `flask`/`flask-cors` — instale-os junto, como no comando acima.
 
 ## Equipe
 
-| Etiqueta | Integrante | Função |
-|---|---|---|
-| ⚪ | Pedro Sampaio | Líder, integrador final |
-| 🔵 | Raul Sampaio | Backend — banco, auth, pagamento |
-| 🟡 | Lucas Garcia | IA/Chatbot — RAG + LLM local |
-| 🔴 | Luan de Araujo | Frontend — dashboard, protótipos |
-| 🟢 | Kevin Rodrigues | Dados/ML — análise + IA preditiva |
-
-## Status Consolidado
-
-| Módulo | Responsável | Status |
-|---|---|---|
-| `ev_chargegrid.py` (motor, SQLite, auth SHA-256, LGPD, Mercado Pago sandbox, 4 funções de leitura) | Raul | ✅ Concluído |
-| `dados_rag.json` (60 sessões reais processadas: receita, pico, DLB, 21 frases RAG) | Kevin | ✅ Concluído |
-| `modelo_demanda.pkl` + notebook de treino + gráfico comparativo (RandomForest) | Kevin/Pedro | ✅ Concluído |
-| Integração do modelo no motor (`ia_prever_demanda`) | Pedro | ✅ Concluído |
-| `ChargeGrid_Intelligence_chatbot.ipynb` (roteador tempo real + RAG + LLM local Ollama, 9 testes, `resultados_testes_sprint3.json`) | Lucas | ✅ Concluído |
-| `requirements.txt` | Kevin | ✅ Concluído |
-| **`dashboard.py` (Streamlit) + protótipos Totem/App/QR Pix** | **Luan** | 🔴 **FALTA — prazo 14/07** |
-| **Integração final ponta a ponta** | **Pedro** | 🔴 **FALTA — prazo 25/07** |
-| **Vídeo, slides, submissão** | **Pedro** | 🔴 **FALTA — meados de agosto** |
-
-## Arquitetura Final
-
-```
-ev_chargegrid.py (motor)
-├── SQLite (chargegrid.db) — tabelas usuarios + sessoes ✅
-├── Auth SHA-256 + máscara LGPD ✅
-├── Mercado Pago Sandbox (USAR_API_REAL_MERCADOPAGO=False) ✅
-├── ia_prever_demanda() → modelo_demanda.pkl (RandomForest, dados reais SP2) ✅
-└── 4 funções de leitura (API interna p/ Lucas e Luan) ✅
-
-ChargeGrid_Intelligence_chatbot.ipynb (Lucas)
-├── Ollama local (llama3.2:3b) — LLM sem custo, sem API paga ✅
-├── Roteador por palavra-chave: tempo real (banco) vs. histórico (RAG) ✅
-├── dados_rag.json (Kevin) — substitui os 12 documentos inventados do Sprint 2 ✅
-└── 9 casos de teste → resultados_testes_sprint3.json ✅
-
-dashboard.py + protótipos (Luan) — 🔄 em andamento, prazo 14/07
-```
-
-## Por que cada peça importa
-
-- **`ev_chargegrid.py`**: é a fonte única de verdade em tempo real. Tudo (chatbot, dashboard, IA) lê dele — sem ele nada mais funciona.
-- **`dados_rag.json`**: sem ele o chatbot responderia com dados inventados para sempre, mesmo com o sistema rodando de forma diferente.
-- **`modelo_demanda.pkl`**: troca "chute" por previsão baseada nas 60 sessões reais — prova de que a IA preditiva é real, não decorativa.
-- **`ChargeGrid_Intelligence_chatbot.ipynb`**: entrega o diferencial de custo zero (LLM local via Ollama) e mostra o sistema respondendo com dados reais e atuais ao mesmo tempo.
-- **`requirements.txt`**: garante que qualquer pessoa (incluindo a banca) consiga rodar o projeto sem erro de dependência.
-- **`dashboard.py` + protótipos (Luan)**: é a última peça visual — sem ela a demonstração fica só em terminal/notebook.
-
-## Dependências Críticas
-
-```
-Raul (banco + 4 funções) ✅
-  ├── Lucas usa no chatbot ✅
-  └── Luan vai usar no dashboard (pendente)
-
-Kevin (dados_rag.json + modelo_demanda.pkl) ✅
-  └── Lucas usa no RAG ✅
-
-Luan (dashboard + protótipos) → Pedro (integração final 25/07) → vídeo/slides (agosto)
-```
-
-## Checklist da Integração Final (25/07)
-Demo grava no banco → dashboard mostra dados reais → chatbot responde com números reais → protótipos navegam sem erro → QR Code aparece no encerramento.
-
-
-
-## Estrutura de Pastas (Repositório)
-
-```
-/entregas/
-  ev_chargegrid.py, chargegrid.db, dados_rag.json,
-  modelo_demanda.pkl, requirements.txt,
-  ChargeGrid_Intelligence_chatbot.ipynb
-  /modelagem_ia/
-    Treinamento_Modelo_Demanda_Sprint3.ipynb
-    grafico_comparativo.png
-  /dashboard/          ← Luan entrega aqui
-```
-
-*Atualizar a cada mudança real de status (não a cada prazo planejado). Qualquer alteração em arquivo já entregue deve ser avisada ao Pedro.*
+Pedro Sampaio, Raul Sampaio, Lucas Garcia, Luan de Araujo, Kevin Rodrigues — EV Challenge 2026, GoodWe / FIAP.
