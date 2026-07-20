@@ -17,6 +17,7 @@ Integração do modelo ML (Pedro — 07/07):
 
 import json
 import datetime
+import os
 import sqlite3
 import hashlib
 import uuid
@@ -28,6 +29,11 @@ try:
     _REQUESTS_DISPONIVEL = True
 except ImportError:
     _REQUESTS_DISPONIVEL = False
+
+# Caminho absoluto, ancorado neste arquivo (não no cwd do processo) — garante
+# que API, script de console e qualquer outro import local sempre leiam e
+# gravem no mesmo chargegrid.db, não importa de onde foram executados.
+CHARGEGRID_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chargegrid.db")
 
 # ─── Constantes do sistema ────────────────────────────────────────────────────
 MAX_ESTACOES          = 10
@@ -103,7 +109,7 @@ def mascarar_id(uid: str) -> str:
 
 
 def inicializar_banco():
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -146,7 +152,7 @@ def inicializar_banco():
 
 def validar_usuario(id_usuario: str) -> bool:
     hash_busca = gerar_hash_placa(id_usuario)
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("SELECT status FROM usuarios WHERE hash_usuario = ?", (hash_busca,))
     resultado = cursor.fetchone()
@@ -156,7 +162,7 @@ def validar_usuario(id_usuario: str) -> bool:
 
 def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     hash_novo = gerar_hash_placa(placa)
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute(
         "INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)",
@@ -203,7 +209,7 @@ def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
 
 
 def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE sessoes SET status_pagamento = 'PAGO', ativa = 0 WHERE id = ?",
@@ -216,7 +222,7 @@ def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
 # ─── MÓDULO DE LEITURA — API interna para Lucas (chatbot) e Luan (dashboard) ──
 
 def listar_sessoes_ativas() -> list[dict]:
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT id_estacao, usuario, kwh_consumidos, valor_sessao, metodo_pagamento
@@ -238,7 +244,7 @@ def obter_status_estacoes() -> dict:
 
 def obter_faturamento_dia(data: Optional[str] = None) -> float:
     data = data or datetime.date.today().isoformat()
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT COALESCE(SUM(valor_sessao), 0)
@@ -252,7 +258,7 @@ def obter_faturamento_dia(data: Optional[str] = None) -> float:
 
 def contar_sessoes_dia(data: Optional[str] = None) -> int:
     data = data or datetime.date.today().isoformat()
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM sessoes WHERE data_sessao = ?", (data,))
     total = cursor.fetchone()[0]
@@ -324,7 +330,7 @@ def simular_tempo() -> None:
         return
 
     print("\n[SISTEMA] Avançando +30 min...")
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
 
     for e in estacoes:
@@ -389,7 +395,7 @@ def iniciar_sessao() -> None:
     uid_mascarado = mascarar_id(uid)
     data_hoje     = datetime.date.today().isoformat()
 
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sessoes
@@ -508,7 +514,7 @@ def demonstracao_comercial() -> None:
     def setup(idx, uid, hora, pgto):
         uid_m     = mascarar_id(uid)
         data_hoje = datetime.date.today().isoformat()
-        conn      = sqlite3.connect("chargegrid.db")
+        conn      = sqlite3.connect(CHARGEGRID_DB)
         cursor    = conn.cursor()
         cursor.execute("""
             INSERT INTO sessoes

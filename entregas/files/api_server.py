@@ -168,7 +168,7 @@ def api_iniciar_sessao():
     data_hoje = datetime.date.today().isoformat()
 
     import sqlite3
-    conn = sqlite3.connect("chargegrid.db")
+    conn = sqlite3.connect(cg.CHARGEGRID_DB)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sessoes
