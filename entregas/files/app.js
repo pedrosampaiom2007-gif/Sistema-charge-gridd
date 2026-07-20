@@ -129,7 +129,7 @@ async function atualizarSessaoAoVivo() {
         iniciarLiveTick();
         irPara("carregando");
       }
-    } else if (telaAtual !== "livre" && telaAtual !== "pagamento" && telaAtual !== "recibo") {
+    } else if (telaAtual !== "livre" && telaAtual !== "identificacao" && telaAtual !== "pagamento" && telaAtual !== "recibo") {
       irPara("livre");
     }
   } catch (err) {
