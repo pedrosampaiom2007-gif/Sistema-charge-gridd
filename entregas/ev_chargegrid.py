@@ -574,7 +574,9 @@ def main() -> None:
     inicializar_banco()
     print("\n  ChargeGrid Intelligence — GoodWe Challenge")
     print("  Plataforma de Gestão Comercial de Recarga EV\n")
-    demonstracao_comercial()
+    # Não roda demonstracao_comercial() automaticamente: ela grava sessões de
+    # teste no chargegrid.db compartilhado com API/dashboard/chatbot e não
+    # fecha todas (limitação conhecida). Rode pela opção 5 quando quiser.
 
     while True:
         print("\n══════ ChargeGrid Intelligence — Gestão Comercial ══════")
