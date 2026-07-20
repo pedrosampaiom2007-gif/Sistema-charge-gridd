@@ -260,6 +260,12 @@ def contar_sessoes_dia(data: Optional[str] = None) -> int:
     return total
 
 
+def obter_potencia_estacoes() -> dict:
+    # potencia_kw só existe em memória (não é salvo no banco), então lê de
+    # `estacoes` em vez do SQLite, diferente das outras funções de leitura.
+    return {e.id_estacao: round(e.potencia_kw, 2) for e in estacoes}
+
+
 # ─── OCPP 1.6J ────────────────────────────────────────────────────────────────
 def ocpp_enviar(action: str, id_estacao: int, payload: dict) -> None:
     msg = {"action": action, "estacaoId": id_estacao, **payload}
