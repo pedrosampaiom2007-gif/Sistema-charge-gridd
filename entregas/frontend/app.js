@@ -28,9 +28,14 @@ async function fazerLogin() {
   const usuario = document.getElementById("f-admin-usuario").value.trim();
   const senha = document.getElementById("f-admin-senha").value;
   const errEl = document.getElementById("login-error");
+  const btn = document.getElementById("btn-login");
   errEl.textContent = "";
 
   if (!usuario || !senha) { errEl.textContent = "Informe usuário e senha."; return; }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Entrando...";
 
   try {
     const res = await fetch(`${API_BASE}/api/admin/login`, {
@@ -45,6 +50,9 @@ async function fazerLogin() {
     iniciarApp();
   } catch (err) {
     errEl.textContent = "Erro de conexão com a API.";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
   }
 }
 

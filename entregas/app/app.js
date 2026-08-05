@@ -20,9 +20,14 @@ function fmtMoeda(v) {
 async function fazerLogin() {
   const placa = document.getElementById("f-placa").value.trim().toUpperCase();
   const errEl = document.getElementById("login-error");
+  const btn = document.getElementById("btn-login");
   errEl.textContent = "";
 
   if (!placa) { errEl.textContent = "Digite sua placa."; return; }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Entrando...";
 
   try {
     const res = await fetch(`${API_BASE}/api/usuarios/${placa}/historico`);
@@ -35,6 +40,29 @@ async function fazerLogin() {
     renderHistorico(data.sessoes);
   } catch (err) {
     errEl.textContent = "Sem conexão com o servidor. A API está rodando?";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+// ─── Atualizar histórico (sem precisar recarregar a página) ───────────────────
+async function atualizarHistorico() {
+  if (!placaAtual) return;
+  const btn = document.getElementById("btn-atualizar-historico");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Atualizando...";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/usuarios/${placaAtual}/historico`);
+    const data = await res.json();
+    renderHistorico(data.sessoes);
+  } catch (err) {
+    showToast("Sem conexão com o servidor.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
   }
 }
 
@@ -99,6 +127,7 @@ document.getElementById("btn-login").addEventListener("click", fazerLogin);
 document.getElementById("f-placa").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
 });
+document.getElementById("btn-atualizar-historico").addEventListener("click", atualizarHistorico);
 document.getElementById("btn-enviar-chat").addEventListener("click", enviarPergunta);
 document.getElementById("chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") enviarPergunta();

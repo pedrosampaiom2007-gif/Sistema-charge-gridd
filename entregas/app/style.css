@@ -91,7 +91,18 @@ a { color: var(--cyan); }
   letter-spacing: 0.08em;
 }
 
-.section-head { margin: 28px 0 14px; }
+.section-head {
+  margin: 28px 0 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.section-caption {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -8px 0 12px;
+}
 .section-head h2 {
   font-family: var(--font-display);
   font-size: 15px;

@@ -66,9 +66,14 @@ document.getElementById("btn-voltar-1").addEventListener("click", () => irPara("
 document.getElementById("btn-confirmar-placa").addEventListener("click", async () => {
   const placa = document.getElementById("f-placa").value.trim();
   const errEl = document.getElementById("err-identificacao");
+  const btn = document.getElementById("btn-confirmar-placa");
   errEl.textContent = "";
 
   if (!placa) { errEl.textContent = "Digite a placa do veículo."; return; }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Confirmando...";
 
   try {
     const res = await fetch(`${API_BASE}/api/sessoes/iniciar`, {
@@ -90,6 +95,9 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
     atualizarSessaoAoVivo();
   } catch (err) {
     errEl.textContent = "Sem conexão com o servidor. Chame um atendente.";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
   }
 });
 

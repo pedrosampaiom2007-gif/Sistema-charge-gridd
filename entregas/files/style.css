@@ -68,6 +68,18 @@ body {
 
 .station-tag.ocupada .dot { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
 
+.link-inicio {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+}
+.link-inicio:hover { color: var(--cyan); }
+
 /* Telas (steps) */
 .screen {
   display: none;
