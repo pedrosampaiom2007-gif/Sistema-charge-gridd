@@ -18,11 +18,12 @@ Integração do modelo ML (Pedro — 07/07):
 import json
 import datetime
 import os
-import sqlite3
+import psycopg2
 import hashlib
 import uuid
 from dataclasses import dataclass
 from typing import Optional
+from dotenv import load_dotenv
 
 try:
     import requests
@@ -30,10 +31,12 @@ try:
 except ImportError:
     _REQUESTS_DISPONIVEL = False
 
-# Caminho absoluto, ancorado neste arquivo (não no cwd do processo) — garante
-# que API, script de console e qualquer outro import local sempre leiam e
-# gravem no mesmo chargegrid.db, não importa de onde foram executados.
-CHARGEGRID_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chargegrid.db")
+# Banco Postgres real (Supabase), lido do .env — não fica hardcoded no código
+# nem no repositório. Substitui o antigo chargegrid.db (arquivo SQLite local),
+# assim API, script de console e qualquer processo se conectam ao mesmo banco
+# de verdade, de qualquer computador, não só de quem tem o arquivo local.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 # ─── Constantes do sistema ────────────────────────────────────────────────────
 MAX_ESTACOES          = 10
@@ -109,7 +112,7 @@ def mascarar_id(uid: str) -> str:
 
 
 def inicializar_banco():
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -122,7 +125,7 @@ def inicializar_banco():
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessoes (
-            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            id                 SERIAL PRIMARY KEY,
             id_estacao         INTEGER,
             usuario            TEXT,
             data_sessao        TEXT,
@@ -142,7 +145,7 @@ def inicializar_banco():
         (gerar_hash_placa("DEF7M01"), "Usuário Demo D"),
     ]
     cursor.executemany(
-        "INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)",
+        "INSERT INTO usuarios (hash_usuario, nome) VALUES (%s, %s) ON CONFLICT (hash_usuario) DO NOTHING",
         usuarios_teste
     )
 
@@ -152,9 +155,9 @@ def inicializar_banco():
 
 def validar_usuario(id_usuario: str) -> bool:
     hash_busca = gerar_hash_placa(id_usuario)
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT status FROM usuarios WHERE hash_usuario = ?", (hash_busca,))
+    cursor.execute("SELECT status FROM usuarios WHERE hash_usuario = %s", (hash_busca,))
     resultado = cursor.fetchone()
     conn.close()
     return resultado is not None and resultado[0] == 'ATIVO'
@@ -162,10 +165,10 @@ def validar_usuario(id_usuario: str) -> bool:
 
 def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     hash_novo = gerar_hash_placa(placa)
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT OR IGNORE INTO usuarios (hash_usuario, nome) VALUES (?, ?)",
+        "INSERT INTO usuarios (hash_usuario, nome) VALUES (%s, %s) ON CONFLICT (hash_usuario) DO NOTHING",
         (hash_novo, nome)
     )
     conn.commit()
@@ -209,10 +212,10 @@ def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
 
 
 def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE sessoes SET status_pagamento = 'PAGO', ativa = 0 WHERE id = ?",
+        "UPDATE sessoes SET status_pagamento = 'PAGO', ativa = 0 WHERE id = %s",
         (id_sessao_db,)
     )
     conn.commit()
@@ -222,7 +225,7 @@ def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
 # ─── MÓDULO DE LEITURA — API interna para Lucas (chatbot) e Luan (dashboard) ──
 
 def listar_sessoes_ativas() -> list[dict]:
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT id_estacao, usuario, kwh_consumidos, valor_sessao, metodo_pagamento
@@ -244,23 +247,23 @@ def obter_status_estacoes() -> dict:
 
 def obter_faturamento_dia(data: Optional[str] = None) -> float:
     data = data or datetime.date.today().isoformat()
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT COALESCE(SUM(valor_sessao), 0)
         FROM sessoes
-        WHERE status_pagamento = 'PAGO' AND data_sessao = ?
+        WHERE status_pagamento = 'PAGO' AND data_sessao = %s
     """, (data,))
     total = cursor.fetchone()[0]
     conn.close()
-    return round(total, 2)
+    return round(float(total), 2)
 
 
 def contar_sessoes_dia(data: Optional[str] = None) -> int:
     data = data or datetime.date.today().isoformat()
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM sessoes WHERE data_sessao = ?", (data,))
+    cursor.execute("SELECT COUNT(*) FROM sessoes WHERE data_sessao = %s", (data,))
     total = cursor.fetchone()[0]
     conn.close()
     return total
@@ -330,7 +333,7 @@ def simular_tempo() -> None:
         return
 
     print("\n[SISTEMA] Avançando +30 min...")
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
     for e in estacoes:
@@ -343,7 +346,7 @@ def simular_tempo() -> None:
         e.valor_sessao     = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
 
         cursor.execute(
-            "UPDATE sessoes SET kwh_consumidos = ?, valor_sessao = ? WHERE id = ?",
+            "UPDATE sessoes SET kwh_consumidos = %s, valor_sessao = %s WHERE id = %s",
             (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db)
         )
 
@@ -395,14 +398,15 @@ def iniciar_sessao() -> None:
     uid_mascarado = mascarar_id(uid)
     data_hoje     = datetime.date.today().isoformat()
 
-    conn = sqlite3.connect(CHARGEGRID_DB)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sessoes
             (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
-        VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
+        VALUES (%s, %s, %s, %s, %s, 'PENDENTE', 1)
+        RETURNING id
     """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento))
-    id_gerado_db = cursor.lastrowid
+    id_gerado_db = cursor.fetchone()[0]
     conn.commit()
     conn.close()
 
@@ -514,14 +518,15 @@ def demonstracao_comercial() -> None:
     def setup(idx, uid, hora, pgto):
         uid_m     = mascarar_id(uid)
         data_hoje = datetime.date.today().isoformat()
-        conn      = sqlite3.connect(CHARGEGRID_DB)
+        conn      = psycopg2.connect(DATABASE_URL)
         cursor    = conn.cursor()
         cursor.execute("""
             INSERT INTO sessoes
                 (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
-            VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
+            VALUES (%s, %s, %s, %s, %s, 'PENDENTE', 1)
+            RETURNING id
         """, (idx + 1, uid_m, data_hoje, hora, pgto))
-        id_db = cursor.lastrowid
+        id_db = cursor.fetchone()[0]
         conn.commit()
         conn.close()
         estacoes[idx].id_usuario       = uid_m

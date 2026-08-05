@@ -167,15 +167,16 @@ def api_iniciar_sessao():
     uid_mascarado = cg.mascarar_id(uid)
     data_hoje = datetime.date.today().isoformat()
 
-    import sqlite3
-    conn = sqlite3.connect(cg.CHARGEGRID_DB)
+    import psycopg2
+    conn = psycopg2.connect(cg.DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sessoes
             (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
-        VALUES (?, ?, ?, ?, ?, 'PENDENTE', 1)
+        VALUES (%s, %s, %s, %s, %s, 'PENDENTE', 1)
+        RETURNING id
     """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento))
-    id_gerado_db = cursor.lastrowid
+    id_gerado_db = cursor.fetchone()[0]
     conn.commit()
     conn.close()
 

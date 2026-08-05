@@ -7,6 +7,14 @@
 # No Colab, a Célula 1 do notebook já cuida disso automaticamente.
 # Para rodar local: curl -fsSL https://ollama.com/install.sh | sh
 
+# API (api_server.py)
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# Banco de dados Postgres (Supabase) — substitui o antigo chargegrid.db (SQLite)
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
+
 # Necessário apenas se USAR_API_REAL_MERCADOPAGO = True
 requests>=2.28.0
 
