@@ -7,6 +7,46 @@ document.getElementById("api-base-label").textContent = API_BASE;
 
 // ─── Estado local ─────────────────────────────────────────────────────────────
 let estacaoSelecionada = null;
+let pollTimer = null;
+
+// ─── Autenticação de administrador ─────────────────────────────────────────────
+// /api/painel fica sem login (o totem também precisa dele) — só /api/kpis e
+// /api/demanda-ia (dado agregado: faturamento total, curva de demanda) exigem
+// token. Token guardado em sessionStorage: some ao fechar a aba, não é
+// persistente entre sessões — coerente com o token em si só viver enquanto o
+// processo da API estiver de pé.
+const TOKEN_KEY = "cg_admin_token";
+let adminToken = sessionStorage.getItem(TOKEN_KEY);
+
+function iniciarApp() {
+  document.getElementById("overlay-login").classList.remove("open");
+  refresh();
+  pollTimer = setInterval(refresh, POLL_MS);
+}
+
+async function fazerLogin() {
+  const usuario = document.getElementById("f-admin-usuario").value.trim();
+  const senha = document.getElementById("f-admin-senha").value;
+  const errEl = document.getElementById("login-error");
+  errEl.textContent = "";
+
+  if (!usuario || !senha) { errEl.textContent = "Informe usuário e senha."; return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.erro || "Falha no login."; return; }
+    adminToken = data.token;
+    sessionStorage.setItem(TOKEN_KEY, adminToken);
+    iniciarApp();
+  } catch (err) {
+    errEl.textContent = "Erro de conexão com a API.";
+  }
+}
 
 // ─── Helpers de UI ────────────────────────────────────────────────────────────
 function showToast(msg) {
@@ -152,10 +192,20 @@ function renderDemandChart(curva, horaAtual) {
 // ─── Fetch + refresh geral ──────────────────────────────────────────────────────
 async function refresh() {
   try {
+    const authHeaders = { "Authorization": `Bearer ${adminToken}` };
     const [painelRes, kpisRes] = await Promise.all([
       fetch(`${API_BASE}/api/painel`),
-      fetch(`${API_BASE}/api/kpis`),
+      fetch(`${API_BASE}/api/kpis`, { headers: authHeaders }),
     ]);
+
+    if (kpisRes.status === 401) {
+      clearInterval(pollTimer);
+      sessionStorage.removeItem(TOKEN_KEY);
+      adminToken = null;
+      document.getElementById("overlay-login").classList.add("open");
+      showToast("Sessão expirada — faça login novamente.");
+      return;
+    }
     if (!painelRes.ok || !kpisRes.ok) throw new Error("Falha na resposta da API");
     const painel = await painelRes.json();
     const kpis = await kpisRes.json();
@@ -177,7 +227,7 @@ async function refresh() {
 
     renderEstacoes(painel.estacoes);
 
-    const curvaRes = await fetch(`${API_BASE}/api/demanda-ia`);
+    const curvaRes = await fetch(`${API_BASE}/api/demanda-ia`, { headers: authHeaders });
     const curva = await curvaRes.json();
     renderDemandChart(curva, painel.hora_atual);
   } catch (err) {
@@ -249,7 +299,14 @@ document.getElementById("overlay").addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") fecharModal();
 });
+document.getElementById("btn-login").addEventListener("click", fazerLogin);
+document.getElementById("f-admin-senha").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") fazerLogin();
+});
 
 // ─── Início ──────────────────────────────────────────────────────────────────────
-refresh();
-setInterval(refresh, POLL_MS);
+if (adminToken) {
+  iniciarApp();
+} else {
+  document.getElementById("f-admin-usuario").focus();
+}

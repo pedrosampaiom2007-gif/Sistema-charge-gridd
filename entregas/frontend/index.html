@@ -72,6 +72,25 @@
   <footer class="hint">API em <span id="api-base-label"></span> · atualização automática a cada 4s</footer>
 </div>
 
+<!-- Modal: login de administrador (bloqueia o painel até logar) -->
+<div class="overlay open" id="overlay-login">
+  <div class="modal">
+    <h3>Login administrador</h3>
+    <div class="field">
+      <label for="f-admin-usuario">Usuário</label>
+      <input id="f-admin-usuario" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="f-admin-senha">Senha</label>
+      <input id="f-admin-senha" type="password" autocomplete="current-password">
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <div class="row">
+      <button class="btn" id="btn-login">Entrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: iniciar sessão -->
 <div class="overlay" id="overlay">
   <div class="modal">

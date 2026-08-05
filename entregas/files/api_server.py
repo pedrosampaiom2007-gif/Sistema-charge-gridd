@@ -167,8 +167,15 @@ def painel():
     })
 
 
+def _token_admin_valido() -> bool:
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    return token in _TOKENS_ADMIN_VALIDOS
+
+
 @app.get("/api/kpis")
 def kpis():
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
     return jsonify({
         "faturamento_dia": cg.obter_faturamento_dia(),
         "sessoes_dia": cg.contar_sessoes_dia(),
@@ -180,6 +187,8 @@ def kpis():
 @app.get("/api/demanda-ia")
 def demanda_ia():
     """Curva de demanda prevista pela IA, hora a hora (0-23h) — para gráfico."""
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
     curva = [{"hora": h, "demanda": round(cg.ia_prever_demanda(h), 2)} for h in range(24)]
     return jsonify(curva)
 
