@@ -1,0 +1,288 @@
+:root {
+  --void: #0a0e14;
+  --panel: #10161d;
+  --panel-raised: #141b23;
+  --line: #1c2530;
+  --line-bright: #2a3644;
+  --ink: #e7edf3;
+  --muted: #7c8a99;
+  --muted-dim: #566270;
+  --amber: #f5a524;
+  --amber-dim: #7a5316;
+  --cyan: #3fd0c9;
+  --cyan-dim: #1d5f5a;
+  --danger: #f2545b;
+  --danger-dim: #6e2529;
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+body {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  background-attachment: fixed;
+}
+
+a { color: var(--cyan); }
+
+/* ─── Layout shell ─────────────────────────────────────────────────────── */
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line-bright);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brand .mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+  align-self: center;
+}
+
+.brand h1 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.brand .sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-head { margin: 28px 0 14px; }
+.section-head h2 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 600;
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: var(--panel-raised);
+  border: 1px solid var(--line-bright);
+  padding: 8px 14px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: border-color .15s ease, color .15s ease;
+}
+.btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.btn.small { padding: 5px 10px; font-size: 11px; }
+
+/* ─── Histórico de pagamentos ──────────────────────────────────────────── */
+
+.historico-list { display: flex; flex-direction: column; gap: 10px; }
+
+.sessao-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 16px;
+}
+
+.sessao-card .linha { display: flex; flex-direction: column; }
+.sessao-card .k {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-dim);
+  margin-bottom: 2px;
+}
+.sessao-card .v {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+.sessao-card .v.pago { color: var(--cyan); }
+.sessao-card .v.pendente { color: var(--amber); }
+
+.empty {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+  border: 1px dashed var(--line-bright);
+}
+
+/* ─── Chat ──────────────────────────────────────────────────────────────── */
+
+.chat-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  height: 380px;
+}
+
+.chat-mensagens {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  max-width: 80%;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--line-bright);
+}
+
+.msg.bot { align-self: flex-start; background: var(--panel-raised); }
+.msg.voce { align-self: flex-end; background: var(--cyan-dim); border-color: var(--cyan); color: var(--ink); }
+.msg.temp { color: var(--muted); font-style: italic; }
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line-bright);
+}
+
+.chat-input-row input {
+  flex: 1;
+  background: var(--void);
+  border: 1px solid var(--line-bright);
+  color: var(--ink);
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.chat-input-row input:focus { outline: 2px solid var(--cyan); outline-offset: 1px; }
+
+/* ─── Modal (login) ─────────────────────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6,9,13,0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.overlay.open { display: flex; }
+
+.modal {
+  background: var(--panel-raised);
+  border: 1px solid var(--line-bright);
+  padding: 24px;
+  width: 340px;
+  max-width: 90vw;
+}
+.modal h3 {
+  font-family: var(--font-display);
+  margin: 0 0 8px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.modal-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.field input {
+  width: 100%;
+  background: var(--void);
+  border: 1px solid var(--line-bright);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.field input:focus { outline: 2px solid var(--cyan); outline-offset: 1px; }
+
+.modal .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.error-msg { color: var(--danger); font-size: 12px; font-family: var(--font-mono); margin-top: -6px; margin-bottom: 12px; min-height: 14px; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--panel-raised);
+  border: 1px solid var(--cyan-dim);
+  color: var(--ink);
+  padding: 12px 18px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  max-width: 320px;
+  transform: translateY(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all .25s ease;
+  z-index: 60;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+@media (max-width: 560px) {
+  .sessao-card { grid-template-columns: repeat(2, 1fr); }
+}

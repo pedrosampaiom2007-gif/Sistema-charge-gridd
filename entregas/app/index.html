@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChargeGrid Intelligence — Minha Conta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Login: só a placa, sem senha — mesmo modelo de identidade do totem -->
+<div class="overlay open" id="overlay-login">
+  <div class="modal">
+    <h3>Minha Conta</h3>
+    <p class="modal-hint">Digite a placa cadastrada pra ver seu histórico e conversar com o assistente.</p>
+    <div class="field">
+      <label for="f-placa">Placa</label>
+      <input id="f-placa" placeholder="ABC1D23" maxlength="8" autocomplete="off">
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <div class="row">
+      <button class="btn" id="btn-login">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>Minha Conta</h1>
+        <div class="sub">Placa: <span id="placa-label">--</span></div>
+      </div>
+    </div>
+    <a class="btn small" href="../index.html">Sair</a>
+  </div>
+
+  <div class="section-head">
+    <h2>Meus pagamentos</h2>
+  </div>
+  <div id="historico-list" class="historico-list"></div>
+
+  <div class="section-head">
+    <h2>Assistente ChargeGrid</h2>
+  </div>
+  <div class="chat-box">
+    <div class="chat-mensagens" id="chat-mensagens">
+      <div class="msg bot">Oi! Pode perguntar sobre suas recargas ou tirar dúvidas gerais sobre carro elétrico.</div>
+    </div>
+    <div class="chat-input-row">
+      <input id="chat-input" placeholder="Digite sua pergunta..." autocomplete="off">
+      <button class="btn" id="btn-enviar-chat">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
