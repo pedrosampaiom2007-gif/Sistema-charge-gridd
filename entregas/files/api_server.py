@@ -39,6 +39,42 @@ CORS(app)  # permite o front (arquivo estático / outra porta) chamar a API
 
 cg.inicializar_banco()
 
+# ─── Recupera sessões que ficaram ativas no banco de uma execução anterior ────
+# Sem isso, toda vez que o processo reinicia (deploy, reboot, o próprio
+# reloader do Flask), a memória "esquece" que uma estação estava ocupada,
+# mesmo que o banco ainda mostre a sessão como ativa — permitindo iniciar uma
+# segunda sessão na mesma estação física e duplicar a linha no banco.
+def _recuperar_sessoes_ativas():
+    import psycopg2
+    conn = psycopg2.connect(cg.DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, id_estacao, usuario, hora_inicio, kwh_consumidos, valor_sessao, metodo_pagamento
+        FROM sessoes WHERE ativa = 1 ORDER BY id_estacao, id DESC
+    """)
+    vistas = set()
+    for id_db, id_estacao, usuario, hora_inicio, kwh, valor, pagamento in cursor.fetchall():
+        if id_estacao in vistas:
+            # sessão duplicada/travada de uma execução anterior — fecha, não é real
+            cursor.execute("UPDATE sessoes SET ativa = 0 WHERE id = %s", (id_db,))
+            continue
+        vistas.add(id_estacao)
+        e = cg.estacoes[id_estacao - 1]
+        e.id_usuario = usuario
+        e.hora_inicio = hora_inicio
+        e.ativa = True
+        e.kwh_consumidos = kwh
+        e.valor_sessao = valor
+        e.metodo_pagamento = pagamento
+        e.id_sessao_db = id_db
+    conn.commit()
+    conn.close()
+    if vistas:
+        cg.balancear_carga()
+        print(f"[RECUPERACAO] {len(vistas)} sessão(ões) ativa(s) recuperada(s) do banco: estações {sorted(vistas)}")
+
+_recuperar_sessoes_ativas()
+
 # ─── Loop automático de simulação (+30min a cada N segundos reais) ───────────
 # Correção do requisito "consumo acumulado no dia" / "receita em tempo real":
 # sem isso, kwh_consumidos e valor_sessao só subiam se alguém chamasse
