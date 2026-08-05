@@ -3,7 +3,7 @@ ChargeGrid Intelligence — Plataforma de Gestão Comercial de Recarga EV
 GoodWe Challenge - Sprint 3
 
 Módulos entregues pelo Backend (Raul Sampaio):
-  - Banco de Dados SQLite (chargegrid.db) integrado com persistência ao vivo.
+  - Banco de Dados Postgres (Supabase) integrado com persistência ao vivo.
   - Autenticação de Placas via Criptografia Hash (SHA-256).
   - Mascaramento de dados sensíveis em conformidade com LGPD.
   - Gateway de Pagamentos Integrado (Simulação Mercado Pago Sandbox API).
