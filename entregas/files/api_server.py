@@ -289,9 +289,25 @@ def api_cadastrar_usuario():
 
 @app.get("/api/usuarios/<placa>/historico")
 def api_historico_usuario(placa: str):
-    """Histórico de pagamentos do motorista — todas as sessões da placa,
-    ativas ou não, mais recentes primeiro. Usado pela tela 'meus pagamentos'."""
+    """Histórico de pagamentos do motorista — todas as sessões de TODAS as
+    placas vinculadas à mesma conta dessa placa (motorista com mais de um
+    carro), mais recentes primeiro. Usado pela tela 'meus pagamentos'."""
     return jsonify({"placa": placa.strip().upper(), "sessoes": cg.historico_usuario(placa)})
+
+
+@app.post("/api/usuarios/vincular")
+def api_vincular_placa():
+    """Adiciona um segundo (ou terceiro...) carro à mesma conta de uma
+    placa já cadastrada."""
+    dados = request.get_json(force=True) or {}
+    placa_existente = (dados.get("placa_existente") or "").strip()
+    placa_nova = (dados.get("placa_nova") or "").strip()
+    if not placa_existente or not placa_nova:
+        return jsonify({"erro": "Informe a placa atual e a nova placa."}), 400
+    ok = cg.vincular_placa(placa_existente, placa_nova)
+    if not ok:
+        return jsonify({"erro": "Não foi possível vincular. Confira se a placa atual está cadastrada e se a nova já não está em uso."}), 400
+    return jsonify({"ok": True})
 
 
 # ─── Login de administrador ────────────────────────────────────────────────

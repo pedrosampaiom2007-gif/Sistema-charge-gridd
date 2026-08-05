@@ -119,13 +119,29 @@ def inicializar_banco():
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
+    # Uma conta pode ter mais de uma placa vinculada (motorista com 2 carros).
+    # A placa continua sendo o jeito de logar — a conta só existe pra agrupar
+    # o histórico de várias placas da mesma pessoa.
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            hash_usuario TEXT PRIMARY KEY,
-            nome         TEXT,
-            status       TEXT DEFAULT 'ATIVO'
+        CREATE TABLE IF NOT EXISTS contas (
+            id   SERIAL PRIMARY KEY,
+            nome TEXT
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            hash_usuario      TEXT PRIMARY KEY,
+            nome              TEXT,
+            status            TEXT DEFAULT 'ATIVO',
+            conta_id          INTEGER REFERENCES contas(id),
+            usuario_mascarado TEXT
+        )
+    """)
+    # Retrofit pra quem já tinha o banco criado antes dessas duas colunas —
+    # idempotente, seguro rodar toda vez que o servidor sobe.
+    cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS conta_id INTEGER REFERENCES contas(id)")
+    cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS usuario_mascarado TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessoes (
@@ -150,15 +166,34 @@ def inicializar_banco():
     """)
 
     usuarios_teste = [
-        (gerar_hash_placa("ABC1D23"), "Cliente Executivo A"),
-        (gerar_hash_placa("XYZ9F88"), "Frota Corporativa B"),
-        (gerar_hash_placa("GHI3K45"), "Cliente Shopping C"),
-        (gerar_hash_placa("DEF7M01"), "Usuário Demo D"),
+        ("ABC1D23", "Cliente Executivo A"),
+        ("XYZ9F88", "Frota Corporativa B"),
+        ("GHI3K45", "Cliente Shopping C"),
+        ("DEF7M01", "Usuário Demo D"),
     ]
-    cursor.executemany(
-        "INSERT INTO usuarios (hash_usuario, nome) VALUES (%s, %s) ON CONFLICT (hash_usuario) DO NOTHING",
-        usuarios_teste
-    )
+    for placa, nome in usuarios_teste:
+        hash_placa = gerar_hash_placa(placa)
+        cursor.execute("SELECT conta_id FROM usuarios WHERE hash_usuario = %s", (hash_placa,))
+        existente = cursor.fetchone()
+
+        if existente is not None and existente[0] is not None:
+            continue  # já cadastrado e já tem conta — nada a fazer
+
+        cursor.execute("INSERT INTO contas (nome) VALUES (%s) RETURNING id", (nome,))
+        conta_id = cursor.fetchone()[0]
+
+        if existente is None:
+            # nunca cadastrado — cria do zero
+            cursor.execute(
+                "INSERT INTO usuarios (hash_usuario, nome, conta_id, usuario_mascarado) VALUES (%s, %s, %s, %s)",
+                (hash_placa, nome, conta_id, mascarar_id(placa))
+            )
+        else:
+            # já cadastrado de antes da coluna conta_id existir — preenche agora
+            cursor.execute(
+                "UPDATE usuarios SET conta_id = %s, usuario_mascarado = %s WHERE hash_usuario = %s",
+                (conta_id, mascarar_id(placa), hash_placa)
+            )
 
     # Admin de teste — troque a senha antes da apresentação de verdade.
     cursor.execute(
@@ -193,14 +228,53 @@ def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     hash_novo = gerar_hash_placa(placa)
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
+
+    cursor.execute("SELECT 1 FROM usuarios WHERE hash_usuario = %s", (hash_novo,))
+    if cursor.fetchone():
+        conn.close()
+        return False  # já cadastrado
+
+    cursor.execute("INSERT INTO contas (nome) VALUES (%s) RETURNING id", (nome,))
+    conta_id = cursor.fetchone()[0]
     cursor.execute(
-        "INSERT INTO usuarios (hash_usuario, nome) VALUES (%s, %s) ON CONFLICT (hash_usuario) DO NOTHING",
-        (hash_novo, nome)
+        "INSERT INTO usuarios (hash_usuario, nome, conta_id, usuario_mascarado) VALUES (%s, %s, %s, %s)",
+        (hash_novo, nome, conta_id, mascarar_id(placa))
     )
     conn.commit()
-    cadastrou = cursor.rowcount > 0
     conn.close()
-    return cadastrou
+    return True
+
+
+def vincular_placa(placa_existente: str, placa_nova: str) -> bool:
+    """Registra placa_nova na MESMA conta de placa_existente — pra motorista
+    com mais de um carro. placa_existente precisa já estar cadastrada;
+    placa_nova não pode já pertencer a outra conta."""
+    hash_existente = gerar_hash_placa(placa_existente)
+    hash_novo = gerar_hash_placa(placa_nova)
+
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT conta_id, nome FROM usuarios WHERE hash_usuario = %s", (hash_existente,))
+    resultado = cursor.fetchone()
+    if resultado is None:
+        conn.close()
+        return False  # placa existente não está cadastrada
+
+    conta_id, nome = resultado
+
+    cursor.execute("SELECT 1 FROM usuarios WHERE hash_usuario = %s", (hash_novo,))
+    if cursor.fetchone():
+        conn.close()
+        return False  # placa nova já está cadastrada (nessa ou noutra conta)
+
+    cursor.execute(
+        "INSERT INTO usuarios (hash_usuario, nome, conta_id, usuario_mascarado) VALUES (%s, %s, %s, %s)",
+        (hash_novo, nome, conta_id, mascarar_id(placa_nova))
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 def criar_pagamento_sandbox(valor: float, id_sessao: Optional[int]) -> dict:
@@ -296,20 +370,39 @@ def contar_sessoes_dia(data: Optional[str] = None) -> int:
 
 
 def historico_usuario(placa: str) -> list[dict]:
-    # `usuario` no banco guarda o valor já mascarado (LGPD) — remascara a
-    # placa recebida do mesmo jeito antes de comparar, não decifra nada.
-    uid_mascarado = mascarar_id(placa)
+    # `sessoes.usuario` guarda o valor já mascarado (LGPD), não a placa nem
+    # o hash — então pra achar a conta primeiro usamos o hash (chave de
+    # `usuarios`), e só depois pegamos a forma mascarada de cada placa da
+    # conta pra buscar nas sessões.
+    hash_busca = gerar_hash_placa(placa)
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
+
+    cursor.execute("SELECT conta_id FROM usuarios WHERE hash_usuario = %s", (hash_busca,))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] is not None:
+        # Conta pode ter mais de uma placa (motorista com mais de um carro) —
+        # traz o histórico de todas elas, não só da que foi usada pra entrar.
+        cursor.execute(
+            "SELECT usuario_mascarado FROM usuarios WHERE conta_id = %s",
+            (resultado[0],)
+        )
+        placas_mascaradas = [r[0] for r in cursor.fetchall() if r[0]]
+    else:
+        # Placa não cadastrada (sem conta) — cai pro comportamento antigo,
+        # só essa placa mascarada na hora.
+        placas_mascaradas = [mascarar_id(placa)]
+
     cursor.execute("""
         SELECT id, id_estacao, data_sessao, hora_inicio, kwh_consumidos,
-               valor_sessao, metodo_pagamento, status_pagamento
-        FROM sessoes WHERE usuario = %s ORDER BY id DESC
-    """, (uid_mascarado,))
-    colunas = ["id", "estacao", "data", "hora_inicio", "kwh", "valor", "pagamento", "status_pagamento"]
-    resultado = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+               valor_sessao, metodo_pagamento, status_pagamento, usuario
+        FROM sessoes WHERE usuario = ANY(%s) ORDER BY id DESC
+    """, (placas_mascaradas,))
+    colunas = ["id", "estacao", "data", "hora_inicio", "kwh", "valor", "pagamento", "status_pagamento", "placa"]
+    resultado_sessoes = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
     conn.close()
-    return resultado
+    return resultado_sessoes
 
 
 def obter_potencia_estacoes() -> dict:

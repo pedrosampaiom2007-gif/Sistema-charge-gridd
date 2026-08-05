@@ -40,7 +40,21 @@
 
   <div class="section-head">
     <h2>Meus pagamentos</h2>
-    <button class="btn small" id="btn-atualizar-historico">Atualizar</button>
+    <div class="row-botoes">
+      <button class="btn small" id="btn-add-carro">+ Adicionar carro</button>
+      <button class="btn small" id="btn-atualizar-historico">Atualizar</button>
+    </div>
+  </div>
+  <div id="add-carro-box" class="add-carro-box" hidden>
+    <div class="field">
+      <label for="f-placa-nova">Placa do outro carro (já precisa estar cadastrada no sistema)</label>
+      <input id="f-placa-nova" placeholder="XYZ9F88" maxlength="8" autocomplete="off">
+    </div>
+    <div class="error-msg" id="add-carro-error"></div>
+    <div class="row">
+      <button class="btn small" id="btn-cancelar-add-carro">Cancelar</button>
+      <button class="btn small" id="btn-confirmar-add-carro">Vincular</button>
+    </div>
   </div>
   <div id="historico-list" class="historico-list"></div>
 

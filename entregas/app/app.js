@@ -75,8 +75,14 @@ function renderHistorico(sessoes) {
     return;
   }
 
+  // Só mostra de qual carro é cada sessão se a conta tiver mais de um —
+  // pra quem só tem uma placa, isso seria repetir a mesma informação toda hora.
+  const placasDistintas = new Set(sessoes.map((s) => s.placa));
+  const mostrarPlaca = placasDistintas.size > 1;
+
   container.innerHTML = sessoes.map((s) => `
     <div class="sessao-card">
+      ${mostrarPlaca ? `<div class="linha"><span class="k">Carro</span><span class="v cyan">${s.placa}</span></div>` : ""}
       <div class="linha"><span class="k">Data</span><span class="v">${s.data}</span></div>
       <div class="linha"><span class="k">Estação</span><span class="v">EST-${String(s.estacao).padStart(2, "0")}</span></div>
       <div class="linha"><span class="k">Horário</span><span class="v">${s.hora_inicio}h</span></div>
@@ -85,6 +91,50 @@ function renderHistorico(sessoes) {
       <div class="linha"><span class="k">Pagamento</span><span class="v ${s.status_pagamento === "PAGO" ? "pago" : "pendente"}">${s.pagamento} · ${s.status_pagamento}</span></div>
     </div>
   `).join("");
+}
+
+// ─── Adicionar outro carro à conta ──────────────────────────────────────────
+function abrirAddCarro() {
+  document.getElementById("add-carro-box").hidden = false;
+  document.getElementById("f-placa-nova").value = "";
+  document.getElementById("add-carro-error").textContent = "";
+  document.getElementById("f-placa-nova").focus();
+}
+
+function fecharAddCarro() {
+  document.getElementById("add-carro-box").hidden = true;
+}
+
+async function confirmarAddCarro() {
+  const placaNova = document.getElementById("f-placa-nova").value.trim().toUpperCase();
+  const errEl = document.getElementById("add-carro-error");
+  const btn = document.getElementById("btn-confirmar-add-carro");
+  errEl.textContent = "";
+
+  if (!placaNova) { errEl.textContent = "Digite a placa do outro carro."; return; }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Vinculando...";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/usuarios/vincular`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placa_existente: placaAtual, placa_nova: placaNova }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.erro || "Não foi possível vincular."; return; }
+
+    fecharAddCarro();
+    showToast(`${placaNova} vinculada à sua conta.`);
+    atualizarHistorico();
+  } catch (err) {
+    errEl.textContent = "Sem conexão com o servidor.";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
 }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
@@ -128,6 +178,12 @@ document.getElementById("f-placa").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
 });
 document.getElementById("btn-atualizar-historico").addEventListener("click", atualizarHistorico);
+document.getElementById("btn-add-carro").addEventListener("click", abrirAddCarro);
+document.getElementById("btn-cancelar-add-carro").addEventListener("click", fecharAddCarro);
+document.getElementById("btn-confirmar-add-carro").addEventListener("click", confirmarAddCarro);
+document.getElementById("f-placa-nova").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarAddCarro();
+});
 document.getElementById("btn-enviar-chat").addEventListener("click", enviarPergunta);
 document.getElementById("chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") enviarPergunta();
