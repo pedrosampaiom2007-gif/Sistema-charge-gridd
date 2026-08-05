@@ -136,6 +136,23 @@ def chat(pergunta: str) -> str:
     return conteudo
 
 
+def responder(pergunta: str) -> str:
+    """Versão sem estado (não usa/altera o `historico` global) — cada
+    chamada é independente. Usada pela API (/api/chat), que pode atender
+    vários usuários ao mesmo tempo e não deve misturar a conversa de um
+    com a de outro."""
+    contexto = buscar_contexto(pergunta)
+    mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}" if contexto else pergunta
+    resposta = client.chat.completions.create(
+        model=MODELO,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": mensagem},
+        ],
+    )
+    return resposta.choices[0].message.content
+
+
 def main() -> None:
     print("ChargeGrid Intelligence — CGI Assistant (local)")
     print(f"RAG com {len(documentos)} fragmentos históricos indexados.")

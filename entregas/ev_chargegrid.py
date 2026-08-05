@@ -111,6 +111,10 @@ def mascarar_id(uid: str) -> str:
     return f"{uid_clean}**"
 
 
+def gerar_hash_senha(senha: str) -> str:
+    return hashlib.sha256(senha.encode('utf-8')).hexdigest()
+
+
 def inicializar_banco():
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
@@ -138,6 +142,13 @@ def inicializar_banco():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admins (
+            usuario    TEXT PRIMARY KEY,
+            senha_hash TEXT
+        )
+    """)
+
     usuarios_teste = [
         (gerar_hash_placa("ABC1D23"), "Cliente Executivo A"),
         (gerar_hash_placa("XYZ9F88"), "Frota Corporativa B"),
@@ -149,8 +160,23 @@ def inicializar_banco():
         usuarios_teste
     )
 
+    # Admin de teste — troque a senha antes da apresentação de verdade.
+    cursor.execute(
+        "INSERT INTO admins (usuario, senha_hash) VALUES (%s, %s) ON CONFLICT (usuario) DO NOTHING",
+        ("admin", gerar_hash_senha("chargegrid2026"))
+    )
+
     conn.commit()
     conn.close()
+
+
+def validar_admin(usuario: str, senha: str) -> bool:
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT senha_hash FROM admins WHERE usuario = %s", (usuario,))
+    resultado = cursor.fetchone()
+    conn.close()
+    return resultado is not None and resultado[0] == gerar_hash_senha(senha)
 
 
 def validar_usuario(id_usuario: str) -> bool:
@@ -267,6 +293,23 @@ def contar_sessoes_dia(data: Optional[str] = None) -> int:
     total = cursor.fetchone()[0]
     conn.close()
     return total
+
+
+def historico_usuario(placa: str) -> list[dict]:
+    # `usuario` no banco guarda o valor já mascarado (LGPD) — remascara a
+    # placa recebida do mesmo jeito antes de comparar, não decifra nada.
+    uid_mascarado = mascarar_id(placa)
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, id_estacao, data_sessao, hora_inicio, kwh_consumidos,
+               valor_sessao, metodo_pagamento, status_pagamento
+        FROM sessoes WHERE usuario = %s ORDER BY id DESC
+    """, (uid_mascarado,))
+    colunas = ["id", "estacao", "data", "hora_inicio", "kwh", "valor", "pagamento", "status_pagamento"]
+    resultado = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+    conn.close()
+    return resultado
 
 
 def obter_potencia_estacoes() -> dict:

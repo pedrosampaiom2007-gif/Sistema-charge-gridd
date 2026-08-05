@@ -24,6 +24,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import datetime
 import os
+import secrets
 import sys
 import threading
 import time
@@ -33,6 +34,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ev_chargegrid as cg
+import chatbot
 
 app = Flask(__name__)
 CORS(app)  # permite o front (arquivo estático / outra porta) chamar a API
@@ -94,6 +96,12 @@ threading.Thread(target=_loop_simulacao, daemon=True).start()
 # backend original — o Raul só guarda a hora 0-23, não o instante exato).
 # Usado pelo totem para mostrar "tempo decorrido" em minutos/segundos.
 _INICIO_REAL = {}
+
+# Tokens de sessão do admin — em memória, como o resto do estado "ao vivo"
+# deste servidor. Válidos até o processo reiniciar (mesma limitação que já
+# existe pra potencia_kw). Suficiente pra uma demonstração; um sistema de
+# produção usaria algo com expiração e persistência.
+_TOKENS_ADMIN_VALIDOS = set()
 
 
 # ─── Helpers de serialização ──────────────────────────────────────────────────
@@ -268,6 +276,47 @@ def api_cadastrar_usuario():
         return jsonify({"erro": "Placa é obrigatória."}), 400
     novo = cg.cadastrar_usuario(placa, nome)
     return jsonify({"ok": True, "cadastrado_agora": novo})
+
+
+@app.get("/api/usuarios/<placa>/historico")
+def api_historico_usuario(placa: str):
+    """Histórico de pagamentos do motorista — todas as sessões da placa,
+    ativas ou não, mais recentes primeiro. Usado pela tela 'meus pagamentos'."""
+    return jsonify({"placa": placa.strip().upper(), "sessoes": cg.historico_usuario(placa)})
+
+
+# ─── Login de administrador ────────────────────────────────────────────────
+# Separado do login por placa: o motorista "loga" digitando a placa (já
+# existia); o gestor precisa de usuário+senha de verdade, porque enxerga
+# dado agregado (faturamento total, curva de demanda) que não é do
+# motorista ver. Ver README para trocar a senha padrão antes de usar de
+# verdade — a de teste (admin / chargegrid2026) é só pra desenvolvimento.
+
+@app.post("/api/admin/login")
+def api_admin_login():
+    dados = request.get_json(force=True) or {}
+    usuario = (dados.get("usuario") or "").strip()
+    senha = dados.get("senha") or ""
+    if not cg.validar_admin(usuario, senha):
+        return jsonify({"erro": "Usuário ou senha inválidos."}), 403
+    token = secrets.token_hex(16)
+    _TOKENS_ADMIN_VALIDOS.add(token)
+    return jsonify({"ok": True, "token": token})
+
+
+# ─── Chatbot ────────────────────────────────────────────────────────────────
+
+@app.post("/api/chat")
+def api_chat():
+    dados = request.get_json(force=True) or {}
+    pergunta = (dados.get("pergunta") or "").strip()
+    if not pergunta:
+        return jsonify({"erro": "Pergunta é obrigatória."}), 400
+    try:
+        resposta = chatbot.responder(pergunta)
+    except Exception as e:
+        return jsonify({"erro": f"Chatbot indisponível: {e}"}), 503
+    return jsonify({"resposta": resposta})
 
 
 if __name__ == "__main__":
