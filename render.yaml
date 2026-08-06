@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chargegrid-api
+    runtime: python
+    plan: free
+    rootDir: entregas/files
+    buildCommand: pip install -r "../requirements (1).txt"
+    startCommand: gunicorn --bind 0.0.0.0:$PORT api_server:app
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: FLASK_DEBUG
+        value: "0"
