@@ -23,7 +23,6 @@ services:
   - type: web
     name: chargegrid-web
     runtime: static
-    plan: free
     rootDir: entregas
     staticPublishPath: .
 
