@@ -18,6 +18,7 @@ let pollTimer = null;
 let liveTickTimer = null;
 let inicioRealAtual = null;
 let telaAtual = "livre";
+let modoCadastro = false; // true = placa não reconhecida, esperando nome pra cadastrar
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function irPara(tela) {
@@ -60,13 +61,32 @@ document.querySelectorAll(".pagamento-chip").forEach((chip) => {
 document.getElementById("btn-iniciar").addEventListener("click", () => {
   document.getElementById("f-placa").value = "";
   document.getElementById("err-identificacao").textContent = "";
+  sairDoModoCadastro();
   irPara("identificacao");
   document.getElementById("f-placa").focus();
 });
 
-document.getElementById("btn-voltar-1").addEventListener("click", () => irPara("livre"));
+// ─── Cadastro de novo motorista (placa não reconhecida) ─────────────────────
+function entrarNoModoCadastro() {
+  modoCadastro = true;
+  document.getElementById("cadastro-inline").hidden = false;
+  document.getElementById("btn-confirmar-placa").textContent = "Cadastrar e continuar";
+  document.getElementById("f-nome-novo").focus();
+}
 
-// ─── Tela 2 -> 3: confirmar placa e iniciar sessão ──────────────────────────────
+function sairDoModoCadastro() {
+  modoCadastro = false;
+  document.getElementById("cadastro-inline").hidden = true;
+  document.getElementById("f-nome-novo").value = "";
+  document.getElementById("btn-confirmar-placa").textContent = "Confirmar e carregar";
+}
+
+document.getElementById("btn-voltar-1").addEventListener("click", () => {
+  sairDoModoCadastro();
+  irPara("livre");
+});
+
+// ─── Tela 2 -> 3: confirmar placa (ou cadastrar + confirmar) e iniciar sessão ──
 document.getElementById("btn-confirmar-placa").addEventListener("click", async () => {
   const placa = document.getElementById("f-placa").value.trim();
   const errEl = document.getElementById("err-identificacao");
@@ -75,11 +95,26 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
 
   if (!placa) { errEl.textContent = "Digite a placa do veículo."; return; }
 
-  const textoOriginal = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Confirmando...";
 
   try {
+    // Placa não reconhecida na tentativa anterior — cadastra antes de continuar.
+    if (modoCadastro) {
+      const nome = document.getElementById("f-nome-novo").value.trim();
+      if (!nome) { errEl.textContent = "Digite seu nome pra concluir o cadastro."; return; }
+
+      btn.textContent = "Cadastrando...";
+      const resCadastro = await fetch(`${API_BASE}/api/usuarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placa, nome }),
+      });
+      const dataCadastro = await resCadastro.json();
+      if (!resCadastro.ok) { errEl.textContent = dataCadastro.erro || "Não foi possível cadastrar."; return; }
+      sairDoModoCadastro();
+    }
+
+    btn.textContent = "Confirmando...";
     const res = await fetch(`${API_BASE}/api/sessoes/iniciar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,7 +126,15 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
       }),
     });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.erro || "Não foi possível iniciar a recarga."; return; }
+    if (!res.ok) {
+      if (res.status === 403) {
+        errEl.textContent = "Placa não cadastrada ainda.";
+        entrarNoModoCadastro();
+      } else {
+        errEl.textContent = data.erro || "Não foi possível iniciar a recarga.";
+      }
+      return;
+    }
 
     inicioRealAtual = Date.now();
     iniciarLiveTick();
@@ -101,7 +144,7 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
     errEl.textContent = "Sem conexão com o servidor. Chame um atendente.";
   } finally {
     btn.disabled = false;
-    btn.textContent = textoOriginal;
+    btn.textContent = modoCadastro ? "Cadastrar e continuar" : "Confirmar e carregar";
   }
 });
 

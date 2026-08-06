@@ -43,6 +43,13 @@
       <button class="pagamento-chip" data-metodo="QRCode">QR Code</button>
     </div>
     <div class="error-kiosk" id="err-identificacao"></div>
+
+    <!-- Só aparece se a placa não for reconhecida ao tentar confirmar -->
+    <div class="field-kiosk" id="cadastro-inline" hidden>
+      <label for="f-nome-novo">Placa não cadastrada — digite seu nome pra se cadastrar agora</label>
+      <input id="f-nome-novo" placeholder="Seu nome" autocomplete="off">
+    </div>
+
     <button class="btn-mega" id="btn-confirmar-placa">Confirmar e carregar</button>
     <button class="btn-secundario" id="btn-voltar-1">Cancelar</button>
   </div>
