@@ -1,4 +1,6 @@
 services:
+  # API (Flask) — sobe pra este blueprint dar deploy no serviço junto com o front-end,
+  # com uma conta só e um clique só ("New +" > "Blueprint" no dashboard do Render).
   - type: web
     name: chargegrid-api
     runtime: python
@@ -13,3 +15,20 @@ services:
         sync: false
       - key: FLASK_DEBUG
         value: "0"
+      - key: CORS_ORIGINS
+        value: "https://chargegrid-web.onrender.com"
+
+  # As 3 telas (totem, app, dashboard) + landing page — arquivos estáticos,
+  # sem servidor Python nenhum, publicados como estão em entregas/.
+  - type: web
+    name: chargegrid-web
+    runtime: static
+    plan: free
+    rootDir: entregas
+    staticPublishPath: .
+
+# Nomes previstos: https://chargegrid-api.onrender.com e
+# https://chargegrid-web.onrender.com. Se algum desses nomes já estiver em
+# uso por outra pessoa no Render (é global), o Render sugere um nome
+# parecido na hora do deploy — nesse caso, atualize API_BASE (nos 3 app.js)
+# e CORS_ORIGINS (acima) pra bater com a URL real gerada.

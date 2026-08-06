@@ -1,5 +1,9 @@
 // ─── Configuração ────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:5000";
+// file:// ou localhost = ambiente de teste local, aponta pra API local;
+// qualquer outro host (site publicado) aponta pra API publicada no Render.
+const API_BASE = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
+  ? "http://localhost:5000"
+  : "https://chargegrid-api.onrender.com";
 const POLL_MS = 4000;
 const MAX_POTENCIA_ESTACAO = 22.0; // espelha MAX_POTENCIA_ESTACAO do backend
 
