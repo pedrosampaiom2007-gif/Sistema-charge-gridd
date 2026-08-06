@@ -24,6 +24,23 @@ function iniciarApp() {
   pollTimer = setInterval(refresh, POLL_MS);
 }
 
+async function logoutAdmin() {
+  if (adminToken) {
+    try {
+      await fetch(`${API_BASE}/api/admin/logout`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${adminToken}` },
+      });
+    } catch (err) {
+      // segue o logout local mesmo se a API não responder — não trava o usuário
+    }
+  }
+  clearInterval(pollTimer);
+  sessionStorage.removeItem(TOKEN_KEY);
+  adminToken = null;
+  document.getElementById("overlay-login").classList.add("open");
+}
+
 async function fazerLogin() {
   const usuario = document.getElementById("f-admin-usuario").value.trim();
   const senha = document.getElementById("f-admin-senha").value;

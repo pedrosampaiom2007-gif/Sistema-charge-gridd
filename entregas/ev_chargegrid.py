@@ -60,7 +60,13 @@ _DEMANDA_FALLBACK = {
 
 try:
     import joblib
-    _MODELO_ML = joblib.load("modelo_demanda.pkl")
+    # Caminho absoluto, ancorado nesta pasta (entregas/) — um caminho relativo
+    # só resolveria se o processo fosse iniciado com CWD == entregas/, o que
+    # não é o caso ao rodar a API (README manda "cd entregas/files" antes),
+    # e fazia o modelo real nunca carregar nesse fluxo (caía sempre no
+    # dicionário de fallback, silenciosamente).
+    _CAMINHO_MODELO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelo_demanda.pkl")
+    _MODELO_ML = joblib.load(_CAMINHO_MODELO)
     print("[IA] modelo_demanda.pkl carregado com sucesso (RandomForest, dados SP2).")
 except Exception:
     print("[IA] modelo_demanda.pkl não encontrado — usando dicionário de fallback.")
@@ -703,8 +709,22 @@ def demonstracao_comercial() -> None:
     balancear_carga()
     painel_operacional()
 
-    for i in range(4):
-        estacoes[i].encerrar()
+    # As estações 2-4 continuam "ativa=1" no banco até aqui — sem isso, a
+    # demo deixa 3 sessões fantasmas no Postgres compartilhado, que voltam
+    # a ocupar estações reais na próxima recuperação de sessões da API.
+    print("\n[CENA 5] Encerrando as demais sessões abertas na demo")
+    for i in range(1, 4):
+        e = estacoes[i]
+        if e.ativa:
+            confirmar_pagamento(e.id_sessao_db)
+            receita_total += e.valor_sessao
+            ocpp_enviar("StopTransaction", e.id_estacao, {
+                "usuario":    e.id_usuario,
+                "valorFinal": e.valor_sessao,
+            })
+            e.encerrar()
+    balancear_carga()
+
     receita_total        = 0.0
     consumo_total_diario = 0.0
     print("\n--- FIM DA DEMONSTRAÇÃO ---")

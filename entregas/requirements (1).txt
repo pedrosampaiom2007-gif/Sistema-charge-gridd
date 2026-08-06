@@ -1,15 +1,21 @@
 # ChargeGrid Intelligence — EV Challenge 2026 — GoodWe / FIAP
 #
 # Como instalar:
-#   pip install -r requirements.txt
+#   pip install -r "requirements (1).txt"
 #
-# ATENÇÃO: o Ollama NÃO é instalado por este arquivo.
-# No Colab, a Célula 1 do notebook já cuida disso automaticamente.
-# Para rodar local: curl -fsSL https://ollama.com/install.sh | sh
+# Cobre o motor (ev_chargegrid.py), a API (api_server.py) e o chatbot local
+# (chatbot.py). O notebook Colab NÃO depende deste arquivo — ele instala o
+# Groq sozinho (célula 1: "!pip install -q groq") e o resto (ipywidgets)
+# já vem pré-instalado em qualquer runtime do Colab.
 
 # API (api_server.py)
 flask>=2.3.0
 flask-cors>=4.0.0
+flask-limiter>=3.5.0
+
+# Servidor WSGI de produção — usado só no deploy (Render/Railway), não no
+# desenvolvimento local (aí o próprio Flask sobe o servidor de dev).
+gunicorn>=21.2.0
 
 # Banco de dados Postgres (Supabase) — substitui o antigo chargegrid.db (SQLite)
 psycopg2-binary>=2.9.0
@@ -22,12 +28,9 @@ requests>=2.28.0
 scikit-learn>=1.1.0
 joblib>=1.2.0
 
-# Chatbot RAG — client Python do Ollama + interface do notebook
-ollama>=0.1.8
-ipywidgets>=8.0.0
-
-# Dashboard Streamlit
-streamlit>=1.28.0
+# Chatbot — cliente Python do Groq (chatbot.py e api_server.py, que importa
+# chatbot.py para a rota /api/chat)
+groq>=0.9.0
 
 # Pipeline de análise — necessário apenas para regenerar dados_rag.json a partir
 # da planilha SP2 (Trabalho_Analise_Comercial_SP2.xlsx) ou o notebook de treino do modelo.

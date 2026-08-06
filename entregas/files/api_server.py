@@ -22,6 +22,8 @@ Como rodar:
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import datetime
 import os
 import secrets
@@ -37,7 +39,34 @@ import ev_chargegrid as cg
 import chatbot
 
 app = Flask(__name__)
-CORS(app)  # permite o front (arquivo estático / outra porta) chamar a API
+
+# ─── CORS — allowlist, não wildcard ───────────────────────────────────────────
+# As 3 telas (totem, app, dashboard) hoje são abertas direto como arquivo
+# (file://), e por isso o navegador manda Origin: null nas chamadas fetch —
+# sem incluir "null" aqui, travar o CORS quebraria o app do jeito que ele é
+# usado hoje. Em produção, defina CORS_ORIGINS com as URLs reais (separadas
+# por vírgula) e "null" deixa de ser necessário se os front-ends passarem a
+# ser servidos por HTTP em vez de abertos como arquivo local.
+_origens_env = os.environ.get("CORS_ORIGINS", "")
+_ORIGENS_PERMITIDAS = [o.strip() for o in _origens_env.split(",") if o.strip()] or [
+    "null",
+    "http://localhost:5500", "http://127.0.0.1:5500",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+]
+CORS(app, origins=_ORIGENS_PERMITIDAS)
+
+# ─── Rate limiting — por IP ────────────────────────────────────────────────────
+# Guarda em memória do processo (suficiente pra 1 worker; um deploy com vários
+# workers/instâncias precisaria de um storage compartilhado, ex. Redis).
+limiter = Limiter(get_remote_address, app=app, default_limits=["300 per minute"])
+
+# ─── Cabeçalhos de segurança em toda resposta ─────────────────────────────────
+@app.after_request
+def _cabecalhos_seguranca(resp):
+    resp.headers["X-Frame-Options"] = "DENY"           # clickjacking
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return resp
 
 cg.inicializar_banco()
 
@@ -288,10 +317,19 @@ def api_cadastrar_usuario():
 
 
 @app.get("/api/usuarios/<placa>/historico")
+@limiter.limit("20 per minute")
 def api_historico_usuario(placa: str):
     """Histórico de pagamentos do motorista — todas as sessões de TODAS as
     placas vinculadas à mesma conta dessa placa (motorista com mais de um
-    carro), mais recentes primeiro. Usado pela tela 'meus pagamentos'."""
+    carro), mais recentes primeiro. Usado pela tela 'meus pagamentos'.
+
+    IDOR conhecido, não corrigido aqui: não existe verificação de que quem
+    pede o histórico é o dono da placa — o "login" do motorista é só digitar
+    a placa, sem senha nem segundo fator, então qualquer um que souber (ou
+    adivinhar) uma placa vê o histórico de pagamento dela. O rate limit acima
+    só encarece um scraping em massa de placas, não resolve o problema de
+    fundo. Ver README ("Limitações conhecidas") para a discussão completa.
+    """
     return jsonify({"placa": placa.strip().upper(), "sessoes": cg.historico_usuario(placa)})
 
 
@@ -317,16 +355,51 @@ def api_vincular_placa():
 # motorista ver. Ver README para trocar a senha padrão antes de usar de
 # verdade — a de teste (admin / chargegrid2026) é só pra desenvolvimento.
 
+# Bloqueio por CONTA, além do limite por IP (@limiter.limit abaixo) — um
+# ataque distribuído por vários IPs contra o mesmo usuário passaria batido
+# só com limite por IP. Em memória do processo, mesma limitação já aceita
+# pra _TOKENS_ADMIN_VALIDOS.
+_FALHAS_LOGIN_POR_CONTA: dict[str, list[float]] = {}
+_JANELA_BLOQUEIO_SEGUNDOS = 300
+_MAX_FALHAS_POR_CONTA = 5
+
+def _conta_bloqueada(usuario: str) -> bool:
+    agora = time.time()
+    tentativas = [t for t in _FALHAS_LOGIN_POR_CONTA.get(usuario, []) if agora - t < _JANELA_BLOQUEIO_SEGUNDOS]
+    _FALHAS_LOGIN_POR_CONTA[usuario] = tentativas
+    return len(tentativas) >= _MAX_FALHAS_POR_CONTA
+
+def _registrar_falha_login(usuario: str) -> None:
+    _FALHAS_LOGIN_POR_CONTA.setdefault(usuario, []).append(time.time())
+
+
 @app.post("/api/admin/login")
+@limiter.limit("5 per minute")
 def api_admin_login():
     dados = request.get_json(force=True) or {}
     usuario = (dados.get("usuario") or "").strip()
     senha = dados.get("senha") or ""
+
+    if _conta_bloqueada(usuario):
+        return jsonify({"erro": "Muitas tentativas para este usuário. Aguarde alguns minutos e tente de novo."}), 429
+
     if not cg.validar_admin(usuario, senha):
+        _registrar_falha_login(usuario)
         return jsonify({"erro": "Usuário ou senha inválidos."}), 403
+
+    _FALHAS_LOGIN_POR_CONTA.pop(usuario, None)
     token = secrets.token_hex(16)
     _TOKENS_ADMIN_VALIDOS.add(token)
     return jsonify({"ok": True, "token": token})
+
+
+@app.post("/api/admin/logout")
+def api_admin_logout():
+    """Revoga o token no servidor — sem isso, um token continuava válido pra
+    sempre (até a API reiniciar) mesmo depois do usuário "sair" no front."""
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    _TOKENS_ADMIN_VALIDOS.discard(token)
+    return jsonify({"ok": True})
 
 
 # ─── Chatbot ────────────────────────────────────────────────────────────────
@@ -345,4 +418,10 @@ def api_chat():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # FLASK_DEBUG=1 só em desenvolvimento local — debug=True liga o debugger
+    # interativo do Werkzeug, que permite execução remota de código se a API
+    # ficar exposta publicamente (deploy). PORT vem do ambiente (Render/
+    # Railway definem isso sozinhos); 5000 é só o padrão local.
+    debug = os.environ.get("FLASK_DEBUG", "1") == "1"
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=debug, port=port, host="0.0.0.0")

@@ -43,6 +43,7 @@ O motor é a única fonte de verdade: API, dashboard, totem, app do motorista e 
 
 ```
 .env                                  DATABASE_URL + GROQ_API_KEY — NÃO existe no repo, veja "Configuração"
+render.yaml                           blueprint de deploy da API no Render (opcional, ver "Deploy")
 entregas/
 ├── ev_chargegrid.py                  motor: banco, auth, contas, pagamento, DLB, IA preditiva
 ├── chatbot.py                        chatbot em terminal, local, sem Colab (mesma lógica do notebook)
@@ -51,8 +52,11 @@ entregas/
 ├── requirements (1).txt              dependências Python (o nome do arquivo é esse mesmo, com espaço)
 ├── ChargeGrid_Intelligence_chatbot.ipynb   chatbot em notebook (roda no Google Colab)
 ├── index.html                        landing page — escolhe motorista / minha conta / admin
+├── tests/
+│   └── test_ev_chargegrid.py         testes automatizados (tarifação, DLB, hash/mascaramento, regressão da demo)
 ├── files/                            totem do motorista (self-service) + api_server.py
 │   ├── api_server.py                 camada Flask que expõe o motor via HTTP/JSON
+│   ├── Procfile                      comando de start pra deploy (Render/Railway)
 │   └── index.html / app.js / style.css
 ├── app/                              área pessoal do motorista — login por placa
 │   └── index.html / app.js / style.css
@@ -60,6 +64,7 @@ entregas/
     └── index.html / app.js / style.css
 
 modelagem_ia/
+├── README.md                         o que tem dentro do zip abaixo
 └── IA aplicada.zip                   notebook de treino do modelo + gráfico comparativo
 ```
 
@@ -72,32 +77,124 @@ GROQ_API_KEY=gsk_...
 ```
 Esse arquivo **nunca é commitado** (está no `.gitignore`, de propósito — tem senha de banco e chave de API). `DATABASE_URL` é a connection string do Supabase (use o modo **Session pooler**, não o "Direct connection" — o direct costuma resolver só em IPv6 e falha em várias redes). `GROQ_API_KEY` vem em console.groq.com → API Keys.
 
-## Como executar
+## Como testar (passo a passo, do zero)
 
-**1. API (backend):**
-```bash
-cd entregas/files
-pip install -r "../requirements (1).txt"
+Instruções pra Windows com PowerShell (é o que o time usa). Em Mac/Linux o terminal se abre diferente, mas os comandos Python são os mesmos (troque `python` por `python3` se `python` não for reconhecido).
+
+### 1. Abrir um terminal
+
+- Aperte a tecla **Windows**, digite `PowerShell`, aperte **Enter**. Ou: abra o Explorador de Arquivos, entre na pasta do repositório, clique com o botão direito num espaço vazio e escolha **"Abrir no Terminal"** (ou "Abrir janela do PowerShell aqui").
+- Você vai ver um prompt do tipo `PS C:\Users\seu-usuario>` — é ali que cada comando abaixo é digitado, seguido de Enter.
+
+### 2. Conferir se o Python está instalado
+
+```powershell
+python --version
+```
+Espera-se `Python 3.9` ou mais novo. **Se abrir a Microsoft Store** em vez de mostrar uma versão, o Python não está instalado de verdade (é só um atalho do Windows) — instale em [python.org/downloads](https://www.python.org/downloads/) marcando a caixa **"Add python.exe to PATH"** durante a instalação, feche e reabra o terminal, e tente de novo.
+
+### 3. Entrar na pasta do projeto
+
+```powershell
+cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
+```
+(ajuste o caminho se você clonou o repositório em outro lugar)
+
+### 4. Instalar as dependências
+
+```powershell
+cd entregas
+pip install -r "requirements (1).txt"
+```
+As aspas em volta do nome do arquivo são obrigatórias — ele tem um espaço e um parêntese no nome, sem aspas o PowerShell entende como dois comandos diferentes e dá erro. A instalação baixa Flask, psycopg2, scikit-learn, groq etc. — demora alguns minutos na primeira vez. Se algum pacote falhar com erro de rede, rode o mesmo comando de novo (timeout de download é comum e geralmente resolve na segunda tentativa).
+
+### 5. Conferir o `.env`
+
+Confirme que existe um arquivo `.env` na **raiz do repositório** (um nível acima de `entregas/`, mesmo nível deste README) com `DATABASE_URL` e `GROQ_API_KEY` preenchidos — veja a seção "Configuração" logo acima se ainda não criou. Sem isso, o próximo passo falha na hora.
+
+### 6. Subir a API — esse terminal fica ocupado, não feche
+
+Ainda no mesmo terminal:
+```powershell
+cd files
 python api_server.py
 ```
-Sobe em `http://localhost:5000`. Na primeira execução, popula o banco com 4 placas de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45`, `DEF7M01`) e um admin de teste (`admin` / `chargegrid2026` — troque antes de uma apresentação real).
+Espere aparecer algo parecido com isto (pode levar alguns segundos):
+```
+[IA] modelo_demanda.pkl carregado com sucesso (RandomForest, dados SP2).
+ * Serving Flask app 'api_server'
+ * Debug mode: on
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+```
+A última linha (`Running on http://127.0.0.1:5000`) é o sinal de que a API está no ar. **Deixe essa janela aberta e rodando** — ela é o processo vivo que serve o totem, o dashboard, o app e mantém o kW de cada estação em tempo real; fechar essa janela derruba tudo. (Se aparecer `modelo_demanda.pkl não encontrado`, não é erro grave — o sistema cai pro dicionário de tarifas fixo e continua funcionando normalmente, só sem o modelo treinado.)
 
-**2. Landing page:** abra `entregas/index.html` no navegador — escolha motorista, minha conta ou administrador.
+### 7. Abrir um SEGUNDO terminal, pra testar sem derrubar a API
 
-**3. Totem (motorista, na estação):** `entregas/files/index.html`. Cada totem físico serve uma única estação: use `?estacao=3` na URL (padrão é a estação 1).
+Repita o passo 1 (tecla Windows → `PowerShell` → Enter) numa **janela nova** — a primeira precisa continuar aberta rodando a API. Nessa nova janela:
+```powershell
+cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
+```
 
-**4. App do motorista:** `entregas/app/index.html` — login só com a placa. Mostra histórico de pagamentos (de todos os carros vinculados à mesma conta) e o chat.
+### 8. Testar pelas telas, no navegador
 
-**5. Dashboard (gestor):** `entregas/frontend/index.html` — pede login antes de mostrar qualquer coisa.
+Com a API do passo 6 rodando, abra estes arquivos direto no navegador (duplo clique no Explorador de Arquivos, ou arraste o arquivo pra uma aba do Chrome/Edge):
 
-**6. Chatbot local (sem Colab):**
-```bash
-cd entregas
+- **Landing page** — `entregas/index.html`: escolhe entre motorista, minha conta ou administrador.
+- **Totem** — `entregas/files/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número).
+- **App do motorista** — `entregas/app/index.html`: login com uma das placas de teste acima — mostra histórico de pagamentos e o chat.
+- **Dashboard (gestor)** — `entregas/frontend/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real).
+
+### 9. Testar a API direto, sem interface (mais rápido pra conferir um endpoint isolado)
+
+No **segundo terminal** (passo 7):
+
+**Ver o painel das 10 estações:**
+```powershell
+curl.exe http://localhost:5000/api/painel
+```
+
+**Iniciar uma sessão de recarga** (estação 2, placa `ABC1D23`, 14h, Pix):
+```powershell
+$body = @{ estacao = 2; usuario = "ABC1D23"; hora = 14; pagamento = "PIX" } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:5000/api/sessoes/iniciar" -Method POST -ContentType "application/json" -Body $body
+```
+Repare que o `POST` usa `Invoke-RestMethod`, não `curl.exe -X POST -d ...` — no PowerShell, `curl` (sem `.exe`) é só um apelido de `Invoke-WebRequest` e a forma de escapar aspas dentro de `-d` varia por versão do Windows e costuma falhar silenciosamente com "Bad Request"; `Invoke-RestMethod` evita esse problema por completo.
+
+**Encerrar a sessão que acabou de abrir (gera o recibo simulado):**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:5000/api/sessoes/2/encerrar" -Method POST
+```
+
+Se qualquer um desses comandos travar sem responder, volte no terminal do passo 6 e confira se a API ainda está rodando sem erro na tela.
+
+### 10. Testar o chatbot
+
+Pode ser no segundo terminal — não depende da API estar no ar (o chatbot fala direto com o Postgres):
+```powershell
+cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd\entregas"
 python chatbot.py
 ```
-**Chatbot no Colab (alternativa):** abra `ChargeGrid_Intelligence_chatbot.ipynb` no Google Colab. Ele baixa os arquivos necessários direto do GitHub — não precisa mais de upload manual. Só precisa configurar dois "Secrets" no Colab (ícone de chave 🔑): `DATABASE_URL` e `GROQ_API_KEY`, com os mesmos valores do seu `.env`.
+Faça uma pergunta sobre dado real (ex: "quantas sessões eu tive hoje?") e uma pergunta geral de carro elétrico, pra ver os dois modos de resposta funcionando. `Ctrl+C` encerra.
 
-Se a API rodar em outro host/porta, ajuste a constante `API_BASE` no topo de cada `app.js` (totem, dashboard, app).
+**Chatbot no Colab (alternativa, sem instalar nada local):** abra `ChargeGrid_Intelligence_chatbot.ipynb` no Google Colab — ele baixa os arquivos direto do GitHub, não precisa de upload manual. Configure dois "Secrets" no Colab (ícone de chave 🔑, na barra lateral): `DATABASE_URL` e `GROQ_API_KEY`, com os mesmos valores do seu `.env`.
+
+### 11. Rodar os testes automatizados
+
+Cobrem tarifação dinâmica, balanceamento de carga (DLB), hash/mascaramento de placa (LGPD) e a correção da demo comercial (regressão) — sem escrever no Postgres de verdade (o banco é mockado nesse teste específico):
+```powershell
+cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
+python -m unittest discover -s entregas/tests -v
+```
+Esperado: `OK` na última linha, com cada teste listado como `ok` acima.
+
+### 12. Encerrar tudo
+
+Volte no terminal da API (passo 6) e aperte `Ctrl+C` pra derrubar o servidor. Feche as janelas de terminal normalmente.
+
+---
+
+Se a API rodar em outro host/porta (não `localhost:5000`), ajuste a constante `API_BASE` no topo de cada `app.js` (totem, dashboard, app).
 
 ## Fluxo principal (totem → API → banco → dashboard/app → chatbot)
 
@@ -119,14 +216,44 @@ Se a API rodar em outro host/porta, ajuste a constante `API_BASE` no topo de cad
 - Chatbot com roteador de tempo real (banco) vs. histórico (RAG) vs. dúvidas gerais de carro elétrico, rodando com Groq (nuvem, sem custo no uso normal) — disponível como script local ou notebook Colab, sem exigir upload manual de arquivo em nenhum dos dois.
 - Recuperação automática de sessões ativas quando a API reinicia (evita duplicar sessão na mesma estação).
 - Landing page única, separando claramente os três públicos (motorista no totem, motorista no app, administrador).
+- **Testes automatizados** (`entregas/tests/`) cobrindo tarifação dinâmica, DLB, hash/mascaramento LGPD e a correção da demo comercial — ver "Como testar", passo 11.
+- Modelo de IA preditiva (`modelo_demanda.pkl`) agora carrega de verdade também rodando pelo fluxo documentado (`cd entregas/files && python api_server.py`) — o carregamento usava caminho relativo e dependia do diretório de onde o processo era iniciado; sem isso, a API sempre caía no dicionário de tarifas fixo, mesmo com o modelo treinado disponível.
+- API pronta pra deploy: porta e modo debug configuráveis por variável de ambiente (`PORT`, `FLASK_DEBUG`) e `Procfile`/`render.yaml` no repositório — ver "Deploy".
+- **Revisão de segurança** (ver seção "Segurança" abaixo): rate limiting, CORS por allowlist, cabeçalhos anti-clickjacking, bloqueio de conta por tentativas de login e revogação de token no logout.
+
+## Segurança
+
+Revisão feita e testada nesta rodada (todos os itens abaixo foram conferidos direto na API rodando, não só lidos no código):
+
+- **Rate limiting**: `/api/admin/login` aceita no máximo 5 tentativas por minuto por IP (`flask-limiter`) *e* bloqueia a conta por 5 minutos após 5 falhas, independente do IP de origem (cobre ataque distribuído, não só de um único IP). `/api/usuarios/<placa>/historico` tem limite de 20/min por IP contra varredura em massa de placas. Todo o resto da API tem um limite geral de 300/min por IP.
+- **CORS por allowlist**: trocado o `CORS(app)` sem restrição por uma lista explícita de origens (`CORS_ORIGINS` no ambiente, com padrão cobrindo o uso local atual — inclusive `Origin: null`, que é o que o navegador manda quando os HTMLs são abertos direto como arquivo).
+- **Cabeçalhos de segurança** em toda resposta: `X-Frame-Options: DENY` (clickjacking), `X-Content-Type-Options: nosniff`, `Referrer-Policy`.
+- **Logout de admin de verdade**: `POST /api/admin/logout` revoga o token no servidor — antes, um token continuava válido pra sempre (até a API reiniciar) mesmo depois do usuário clicar em "Sair".
+- **Sem SQL Injection**: toda consulta no motor e na API usa parâmetros (`%s` do psycopg2), nenhuma faz concatenação/f-string de SQL — auditado arquivo por arquivo (`ev_chargegrid.py`, `api_server.py`, `chatbot.py`).
+- **Sem vazamento de hash/PII nas respostas**: nenhum endpoint retorna `senha_hash` nem `hash_usuario` — as respostas já usavam só a placa mascarada (LGPD), auditado endpoint por endpoint.
+- **Enumeração de usuário**: o login de admin já respondia com mensagem genérica ("Usuário ou senha inválidos") tanto pra usuário inexistente quanto senha errada — nenhuma mudança necessária aí. As mensagens ligadas a placa (`Credencial não autorizada`, `já estava cadastrado`) não foram alteradas de propósito: placa não é segredo (é informação pública, visível no próprio carro), então o modelo clássico de "enumeração de usuário" não se aplica da mesma forma — o motorista *precisa* saber se a própria placa está cadastrada pra usar o totem.
+- **IDOR conhecido, não corrigido — decisão em aberto**: `GET /api/usuarios/<placa>/historico` não verifica se quem pede o histórico é o dono da placa. Como o "login" do motorista é só digitar a placa (sem senha nem segundo fator, por design), qualquer pessoa que souber uma placa vê o histórico de pagamento dela. O rate limit acima só encarece uma coleta em massa, não resolve o problema de fundo. Resolver de verdade exigiria adicionar um segredo ao login do motorista (PIN, código enviado por SMS/e-mail etc.) — uma mudança de UX nas 3 telas, não um patch pontual, por isso não foi feita sem alinhar antes.
 
 ## Limitações conhecidas
 
 - **O totem não tem login nem menu de navegação além do essencial** — de propósito. É um ponto de serviço físico, precisa ser rápido; funcionalidades "extras" (histórico, chat) ficam só no app do motorista, não no totem.
-- `potencia_kw` de cada estação existe só na memória do processo da API — se ela reiniciar, as estações voltam a mostrar 0 kW até o próximo ciclo de simulação (o histórico de kWh e valor no banco não é afetado; a sessão em si é recuperada corretamente).
-- A opção 5 do menu de console (`python ev_chargegrid.py`, demonstração comercial) ainda não fecha todas as sessões que abre — se for usada antes de uma apresentação real, confira o painel depois.
 - A integração com hardware de carregador real (protocolo OCPP) é só simulada (a função correspondente imprime uma mensagem, não fala com equipamento nenhum) — a lógica de negócio e a interface são reutilizáveis, a comunicação com hardware físico não foi implementada.
 - Sem `.env` configurado (veja "Configuração"), nada roda — nem a API, nem o chatbot.
+- Sem testes automatizados para as funções que leem/escrevem no Postgres (só as pura-lógica e a demo, com o banco mockado) — cobrir isso exigiria um banco de teste descartável, que ainda não existe.
+- Token de sessão do admin fica só em memória do processo da API (mesma limitação estrutural do `potencia_kw`, já documentada no código) — reiniciar a API desloga todo admin logado. O logout explícito (novo) já revoga o token antes disso, o que faltava.
+- **IDOR no histórico de pagamentos** (`/api/usuarios/<placa>/historico`) — ver seção "Segurança" acima. É a limitação de segurança mais séria do sistema hoje.
+- Rate limiting guarda o estado em memória do processo — um deploy com múltiplos workers/instâncias precisaria de um storage compartilhado (Redis) pra o limite valer entre eles; com 1 processo (o caso de hoje), funciona normalmente.
+
+## Deploy (opcional)
+
+Hoje o sistema roda em `localhost` (ver "Como testar"). O repositório já está preparado pra publicar a API num servidor de verdade, sem precisar reescrever nada:
+
+- **`render.yaml`** (raiz do repo): blueprint do [Render](https://render.com) — aponta pra `entregas/files`, instala as dependências e sobe com `gunicorn` (servidor de produção; o servidor embutido do Flask, usado localmente, avisa explicitamente que não deve ser exposto assim).
+- **`entregas/files/Procfile`**: mesma ideia, pra Railway ou qualquer host compatível com Procfile.
+- Em ambos, configure `DATABASE_URL`, `GROQ_API_KEY` e `FLASK_DEBUG=0` como variáveis de ambiente no painel do serviço — nunca no código. `FLASK_DEBUG=0` é obrigatório num servidor público: com debug ligado, o Werkzeug expõe um console interativo que permite executar código remotamente.
+- Depois da API publicada, troque `API_BASE` no topo de cada `app.js` (totem, dashboard, app) pra a URL pública, e sirva os HTMLs estáticos em qualquer host (GitHub Pages, Vercel, Netlify — são arquivos estáticos, não precisam de servidor Python).
+
+Nenhuma conta é criada nem publicada automaticamente por esses arquivos — eles só deixam o repositório pronto pra quando alguém do time conectar uma conta existente (Render/Railway) e publicar.
 
 ## Equipe
 

@@ -84,14 +84,20 @@ de `frontend/app.js`.
   objetos em memória diretamente — exceto `hora_inicio`, que ainda não tem
   uma função de leitura oficial (sinalizado com comentário no código).
 
-## Limitações conhecidas (do backend original, não corrigidas aqui)
+## Limitações conhecidas
 
-- `potencia_kw` não é persistido no banco — se o servidor da API reiniciar,
-  as estações voltam a mostrar 0 kW até uma nova sessão ser iniciada (o
-  histórico de kWh/valor no banco continua intacto).
-- `demonstracao_comercial()` do script original zera o estado em memória no
-  final, mas não atualiza `ativa=0` no banco para as sessões 2, 3 e 4 —
-  por isso o dashboard não chama essa função automaticamente.
+- ~~`potencia_kw` não é persistido no banco...~~ **corrigido**: a API recupera
+  as sessões ativas do Postgres no boot (`_recuperar_sessoes_ativas`) e já
+  chama `balancear_carga()` na sequência, recalculando `potencia_kw` na hora
+  — não fica em 0 esperando a próxima sessão.
+- ~~`demonstracao_comercial()` não atualiza `ativa=0` no banco para as sessões
+  2, 3 e 4...~~ **corrigido**: a função agora fecha (confirma pagamento +
+  `StopTransaction`) as 4 sessões, não só a primeira.
 - O intervalo do loop automático (15s = 30min simulados) é arbitrário, pensado
   pra demonstração ficar visível rápido. Para uma "simulação realista" de
   verdade, ajustem `SIMULACAO_INTERVALO_SEGUNDOS` em `api_server.py`.
+
+Nota: este README (e a estrutura `backend/`+`chargegrid.db` que ele descreve)
+é de uma fase anterior do projeto. A estrutura e o "Como rodar" atuais estão
+no [README.md da raiz do repositório](../../README.md) — o banco hoje é
+Postgres (Supabase), não SQLite.
