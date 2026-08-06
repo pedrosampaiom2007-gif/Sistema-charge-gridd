@@ -10,7 +10,8 @@
 </head>
 <body>
 
-<!-- Login: só a placa, sem senha — mesmo modelo de identidade do totem -->
+<!-- Login: só a placa, sem senha — mesmo modelo de identidade do totem.
+     "Cadastrar" alterna o mesmo formulário em vez de ser uma tela separada. -->
 <div class="overlay open" id="overlay-login">
   <div class="modal">
     <h3>Minha Conta</h3>
@@ -19,7 +20,12 @@
       <label for="f-placa">Placa</label>
       <input id="f-placa" placeholder="ABC1D23" maxlength="8" autocomplete="off">
     </div>
+    <div class="field" id="campo-nome-cadastro" hidden>
+      <label for="f-nome-cadastro">Seu nome</label>
+      <input id="f-nome-cadastro" placeholder="Como podemos te chamar?" autocomplete="off">
+    </div>
     <div class="error-msg" id="login-error"></div>
+    <p class="link-linha"><a href="#" id="link-cadastro">Ainda não tem cadastro? Cadastre-se</a></p>
     <div class="row">
       <button class="btn" id="btn-login">Entrar</button>
     </div>

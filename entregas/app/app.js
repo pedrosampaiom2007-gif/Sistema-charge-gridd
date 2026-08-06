@@ -6,6 +6,7 @@ const API_BASE = (location.protocol === "file:" || location.hostname === "localh
   : "https://chargegrid-api.onrender.com";
 
 let placaAtual = null;
+let modoCadastroLogin = false; // true = tela de login virou "cadastre-se"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function showToast(msg) {
@@ -20,6 +21,21 @@ function fmtMoeda(v) {
   return "R$ " + Number(v).toFixed(2).replace(".", ",");
 }
 
+// ─── Alterna a tela de login entre "entrar" e "cadastrar-se" ──────────────────
+// Não é uma tela separada — é o mesmo formulário, só revelando o campo de nome.
+// Sem isso, quem abre o app direto (sem nunca ter passado pelo totem) fica
+// sem nenhum jeito de virar cliente.
+function alternarModoCadastro() {
+  modoCadastroLogin = !modoCadastroLogin;
+  document.getElementById("campo-nome-cadastro").hidden = !modoCadastroLogin;
+  document.getElementById("btn-login").textContent = modoCadastroLogin ? "Cadastrar e entrar" : "Entrar";
+  document.getElementById("link-cadastro").textContent = modoCadastroLogin
+    ? "Já sou cadastrado"
+    : "Ainda não tem cadastro? Cadastre-se";
+  document.getElementById("login-error").textContent = "";
+  document.getElementById(modoCadastroLogin ? "f-nome-cadastro" : "f-placa").focus();
+}
+
 // ─── Login por placa (mesma identidade do totem — sem senha) ──────────────────
 async function fazerLogin() {
   const placa = document.getElementById("f-placa").value.trim().toUpperCase();
@@ -29,11 +45,24 @@ async function fazerLogin() {
 
   if (!placa) { errEl.textContent = "Digite sua placa."; return; }
 
-  const textoOriginal = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Entrando...";
 
   try {
+    if (modoCadastroLogin) {
+      const nome = document.getElementById("f-nome-cadastro").value.trim();
+      if (!nome) { errEl.textContent = "Digite seu nome pra concluir o cadastro."; return; }
+
+      btn.textContent = "Cadastrando...";
+      const resCadastro = await fetch(`${API_BASE}/api/usuarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placa, nome }),
+      });
+      const dataCadastro = await resCadastro.json();
+      if (!resCadastro.ok) { errEl.textContent = dataCadastro.erro || "Não foi possível cadastrar."; return; }
+    }
+
+    btn.textContent = "Entrando...";
     const res = await fetch(`${API_BASE}/api/usuarios/${placa}/historico`);
     if (!res.ok) { errEl.textContent = "Erro ao consultar a placa."; return; }
     const data = await res.json();
@@ -46,7 +75,7 @@ async function fazerLogin() {
     errEl.textContent = "Sem conexão com o servidor. A API está rodando?";
   } finally {
     btn.disabled = false;
-    btn.textContent = textoOriginal;
+    btn.textContent = modoCadastroLogin ? "Cadastrar e entrar" : "Entrar";
   }
 }
 
@@ -179,6 +208,13 @@ async function enviarPergunta() {
 // ─── Listeners ──────────────────────────────────────────────────────────────
 document.getElementById("btn-login").addEventListener("click", fazerLogin);
 document.getElementById("f-placa").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") fazerLogin();
+});
+document.getElementById("link-cadastro").addEventListener("click", (e) => {
+  e.preventDefault();
+  alternarModoCadastro();
+});
+document.getElementById("f-nome-cadastro").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
 });
 document.getElementById("btn-atualizar-historico").addEventListener("click", atualizarHistorico);
