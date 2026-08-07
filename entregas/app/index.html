@@ -15,10 +15,14 @@
 <div class="overlay open" id="overlay-login">
   <div class="modal">
     <h3>Minha Conta</h3>
-    <p class="modal-hint">Digite a placa cadastrada pra ver seu histórico e conversar com o assistente.</p>
+    <p class="modal-hint">Digite a placa e o PIN cadastrados pra ver seu histórico e conversar com o assistente.</p>
     <div class="field">
       <label for="f-placa">Placa</label>
       <input id="f-placa" placeholder="ABC1D23" maxlength="8" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="f-pin">PIN (4 números)</label>
+      <input id="f-pin" type="password" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
     </div>
     <div class="field" id="campo-nome-cadastro" hidden>
       <label for="f-nome-cadastro">Seu nome</label>

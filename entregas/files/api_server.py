@@ -305,46 +305,60 @@ def api_avancar_tempo():
     return jsonify({"ok": True, "painel": painel().json})
 
 
+def _pin_valido(pin: str) -> bool:
+    return isinstance(pin, str) and pin.isdigit() and len(pin) == 4
+
+
 @app.post("/api/usuarios")
 def api_cadastrar_usuario():
     dados = request.get_json(force=True) or {}
     placa = (dados.get("placa") or "").strip()
     nome = dados.get("nome") or "Usuario Cadastrado"
+    pin = (dados.get("pin") or "").strip()
     if not placa:
         return jsonify({"erro": "Placa é obrigatória."}), 400
-    novo = cg.cadastrar_usuario(placa, nome)
+    if not _pin_valido(pin):
+        return jsonify({"erro": "PIN precisa ter exatamente 4 números."}), 400
+    novo = cg.cadastrar_usuario(placa, nome, pin)
     return jsonify({"ok": True, "cadastrado_agora": novo})
 
 
-@app.get("/api/usuarios/<placa>/historico")
+@app.post("/api/usuarios/historico")
 @limiter.limit("20 per minute")
-def api_historico_usuario(placa: str):
+def api_historico_usuario():
     """Histórico de pagamentos do motorista — todas as sessões de TODAS as
     placas vinculadas à mesma conta dessa placa (motorista com mais de um
     carro), mais recentes primeiro. Usado pela tela 'meus pagamentos'.
 
-    IDOR conhecido, não corrigido aqui: não existe verificação de que quem
-    pede o histórico é o dono da placa — o "login" do motorista é só digitar
-    a placa, sem senha nem segundo fator, então qualquer um que souber (ou
-    adivinhar) uma placa vê o histórico de pagamento dela. O rate limit acima
-    só encarece um scraping em massa de placas, não resolve o problema de
-    fundo. Ver README ("Limitações conhecidas") para a discussão completa.
+    Exige o PIN da conta (definido no cadastro) — sem isso, bastava saber a
+    placa (sem segredo nenhum) pra ver o histórico de pagamento de qualquer
+    motorista (IDOR, já foi assim antes desta correção). É por isso que essa
+    rota é POST com o PIN no corpo, não mais GET só com a placa na URL.
     """
+    dados = request.get_json(force=True) or {}
+    placa = (dados.get("placa") or "").strip()
+    pin = (dados.get("pin") or "").strip()
+    if not placa or not pin:
+        return jsonify({"erro": "Informe a placa e o PIN."}), 400
+    if not cg.validar_pin(placa, pin):
+        return jsonify({"erro": "Placa ou PIN incorretos."}), 403
     return jsonify({"placa": placa.strip().upper(), "sessoes": cg.historico_usuario(placa)})
 
 
 @app.post("/api/usuarios/vincular")
 def api_vincular_placa():
     """Adiciona um segundo (ou terceiro...) carro à mesma conta de uma
-    placa já cadastrada."""
+    placa já cadastrada — exige o PIN da conta como prova de que quem
+    está pedindo é o dono, não só alguém que sabe a placa existente."""
     dados = request.get_json(force=True) or {}
     placa_existente = (dados.get("placa_existente") or "").strip()
     placa_nova = (dados.get("placa_nova") or "").strip()
-    if not placa_existente or not placa_nova:
-        return jsonify({"erro": "Informe a placa atual e a nova placa."}), 400
-    ok = cg.vincular_placa(placa_existente, placa_nova)
+    pin = (dados.get("pin") or "").strip()
+    if not placa_existente or not placa_nova or not pin:
+        return jsonify({"erro": "Informe a placa atual, o PIN e a nova placa."}), 400
+    ok = cg.vincular_placa(placa_existente, placa_nova, pin)
     if not ok:
-        return jsonify({"erro": "Não foi possível vincular. Confira se a placa atual está cadastrada e se a nova já não está em uso."}), 400
+        return jsonify({"erro": "Não foi possível vincular. Confira a placa atual, o PIN, e se a nova placa já não está em uso."}), 400
     return jsonify({"ok": True})
 
 

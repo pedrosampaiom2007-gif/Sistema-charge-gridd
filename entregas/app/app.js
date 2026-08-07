@@ -6,6 +6,7 @@ const API_BASE = (location.protocol === "file:" || location.hostname === "localh
   : "https://chargegrid-api.onrender.com";
 
 let placaAtual = null;
+let pinAtual = null; // guardado só em memória, reaproveitado por "+ Adicionar carro"
 let modoCadastroLogin = false; // true = tela de login virou "cadastre-se"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,14 +37,18 @@ function alternarModoCadastro() {
   document.getElementById(modoCadastroLogin ? "f-nome-cadastro" : "f-placa").focus();
 }
 
-// ─── Login por placa (mesma identidade do totem — sem senha) ──────────────────
+// ─── Login por placa + PIN ──────────────────────────────────────────────────
+// PIN existe porque, sem ele, bastava saber a placa (sem segredo nenhum)
+// pra ver o histórico de pagamento de qualquer motorista.
 async function fazerLogin() {
   const placa = document.getElementById("f-placa").value.trim().toUpperCase();
+  const pin = document.getElementById("f-pin").value.trim();
   const errEl = document.getElementById("login-error");
   const btn = document.getElementById("btn-login");
   errEl.textContent = "";
 
   if (!placa) { errEl.textContent = "Digite sua placa."; return; }
+  if (!/^\d{4}$/.test(pin)) { errEl.textContent = "O PIN precisa ter exatamente 4 números."; return; }
 
   btn.disabled = true;
 
@@ -56,18 +61,23 @@ async function fazerLogin() {
       const resCadastro = await fetch(`${API_BASE}/api/usuarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placa, nome }),
+        body: JSON.stringify({ placa, nome, pin }),
       });
       const dataCadastro = await resCadastro.json();
       if (!resCadastro.ok) { errEl.textContent = dataCadastro.erro || "Não foi possível cadastrar."; return; }
     }
 
     btn.textContent = "Entrando...";
-    const res = await fetch(`${API_BASE}/api/usuarios/${placa}/historico`);
-    if (!res.ok) { errEl.textContent = "Erro ao consultar a placa."; return; }
+    const res = await fetch(`${API_BASE}/api/usuarios/historico`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placa, pin }),
+    });
     const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.erro || "Placa ou PIN incorretos."; return; }
 
     placaAtual = placa;
+    pinAtual = pin;
     document.getElementById("placa-label").textContent = placa;
     document.getElementById("overlay-login").classList.remove("open");
     renderHistorico(data.sessoes);
@@ -88,7 +98,11 @@ async function atualizarHistorico() {
   btn.textContent = "Atualizando...";
 
   try {
-    const res = await fetch(`${API_BASE}/api/usuarios/${placaAtual}/historico`);
+    const res = await fetch(`${API_BASE}/api/usuarios/historico`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placa: placaAtual, pin: pinAtual }),
+    });
     const data = await res.json();
     renderHistorico(data.sessoes);
   } catch (err) {
@@ -154,7 +168,7 @@ async function confirmarAddCarro() {
     const res = await fetch(`${API_BASE}/api/usuarios/vincular`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ placa_existente: placaAtual, placa_nova: placaNova }),
+      body: JSON.stringify({ placa_existente: placaAtual, placa_nova: placaNova, pin: pinAtual }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.erro || "Não foi possível vincular."; return; }
@@ -208,6 +222,9 @@ async function enviarPergunta() {
 // ─── Listeners ──────────────────────────────────────────────────────────────
 document.getElementById("btn-login").addEventListener("click", fazerLogin);
 document.getElementById("f-placa").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") fazerLogin();
+});
+document.getElementById("f-pin").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
 });
 document.getElementById("link-cadastro").addEventListener("click", (e) => {

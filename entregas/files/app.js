@@ -78,6 +78,7 @@ function sairDoModoCadastro() {
   modoCadastro = false;
   document.getElementById("cadastro-inline").hidden = true;
   document.getElementById("f-nome-novo").value = "";
+  document.getElementById("f-pin-novo").value = "";
   document.getElementById("btn-confirmar-placa").textContent = "Confirmar e carregar";
 }
 
@@ -101,13 +102,15 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
     // Placa não reconhecida na tentativa anterior — cadastra antes de continuar.
     if (modoCadastro) {
       const nome = document.getElementById("f-nome-novo").value.trim();
+      const pin = document.getElementById("f-pin-novo").value.trim();
       if (!nome) { errEl.textContent = "Digite seu nome pra concluir o cadastro."; return; }
+      if (!/^\d{4}$/.test(pin)) { errEl.textContent = "O PIN precisa ter exatamente 4 números."; return; }
 
       btn.textContent = "Cadastrando...";
       const resCadastro = await fetch(`${API_BASE}/api/usuarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placa, nome }),
+        body: JSON.stringify({ placa, nome, pin }),
       });
       const dataCadastro = await resCadastro.json();
       if (!resCadastro.ok) { errEl.textContent = dataCadastro.erro || "Não foi possível cadastrar."; return; }

@@ -121,19 +121,27 @@ def gerar_hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode('utf-8')).hexdigest()
 
 
+def gerar_hash_pin(pin: str) -> str:
+    return hashlib.sha256(pin.strip().encode('utf-8')).hexdigest()
+
+
 def inicializar_banco():
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
     # Uma conta pode ter mais de uma placa vinculada (motorista com 2 carros).
     # A placa continua sendo o jeito de logar — a conta só existe pra agrupar
-    # o histórico de várias placas da mesma pessoa.
+    # o histórico de várias placas da mesma pessoa. pin_hash protege esse
+    # histórico: sem ele, bastava saber a placa (sem segredo nenhum) pra ver
+    # o histórico de pagamento de qualquer motorista.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS contas (
-            id   SERIAL PRIMARY KEY,
-            nome TEXT
+            id       SERIAL PRIMARY KEY,
+            nome     TEXT,
+            pin_hash TEXT
         )
     """)
+    cursor.execute("ALTER TABLE contas ADD COLUMN IF NOT EXISTS pin_hash TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -177,15 +185,29 @@ def inicializar_banco():
         ("GHI3K45", "Cliente Shopping C"),
         ("DEF7M01", "Usuário Demo D"),
     ]
+    PIN_TESTE = "0000"  # PIN de todas as contas de teste — troque antes de uma apresentação real
     for placa, nome in usuarios_teste:
         hash_placa = gerar_hash_placa(placa)
         cursor.execute("SELECT conta_id FROM usuarios WHERE hash_usuario = %s", (hash_placa,))
         existente = cursor.fetchone()
 
         if existente is not None and existente[0] is not None:
-            continue  # já cadastrado e já tem conta — nada a fazer
+            # já tem conta — só garante que ela tem PIN também (retrofit de
+            # quem ganhou conta antes do pin_hash existir, como aconteceu
+            # com essas 4 contas de teste na prática)
+            cursor.execute("SELECT pin_hash FROM contas WHERE id = %s", (existente[0],))
+            pin_existente = cursor.fetchone()
+            if pin_existente and pin_existente[0] is None:
+                cursor.execute(
+                    "UPDATE contas SET pin_hash = %s WHERE id = %s",
+                    (gerar_hash_pin(PIN_TESTE), existente[0])
+                )
+            continue
 
-        cursor.execute("INSERT INTO contas (nome) VALUES (%s) RETURNING id", (nome,))
+        cursor.execute(
+            "INSERT INTO contas (nome, pin_hash) VALUES (%s, %s) RETURNING id",
+            (nome, gerar_hash_pin(PIN_TESTE))
+        )
         conta_id = cursor.fetchone()[0]
 
         if existente is None:
@@ -230,7 +252,10 @@ def validar_usuario(id_usuario: str) -> bool:
     return resultado is not None and resultado[0] == 'ATIVO'
 
 
-def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
+def cadastrar_usuario(placa: str, nome: str, pin: str) -> bool:
+    """pin: 4 dígitos escolhidos pelo motorista — protege o histórico de
+    pagamento depois (ver validar_pin). Sem isso, bastaria saber a placa
+    pra ver o histórico de qualquer um (IDOR)."""
     hash_novo = gerar_hash_placa(placa)
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
@@ -240,7 +265,10 @@ def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
         conn.close()
         return False  # já cadastrado
 
-    cursor.execute("INSERT INTO contas (nome) VALUES (%s) RETURNING id", (nome,))
+    cursor.execute(
+        "INSERT INTO contas (nome, pin_hash) VALUES (%s, %s) RETURNING id",
+        (nome, gerar_hash_pin(pin))
+    )
     conta_id = cursor.fetchone()[0]
     cursor.execute(
         "INSERT INTO usuarios (hash_usuario, nome, conta_id, usuario_mascarado) VALUES (%s, %s, %s, %s)",
@@ -251,10 +279,34 @@ def cadastrar_usuario(placa: str, nome: str = "Usuario Cadastrado") -> bool:
     return True
 
 
-def vincular_placa(placa_existente: str, placa_nova: str) -> bool:
+def validar_pin(placa: str, pin: str) -> bool:
+    """Confere o PIN contra a conta dona dessa placa. Usado antes de mostrar
+    histórico de pagamento ou vincular um carro novo — nunca antes de
+    iniciar/encerrar recarga no totem, que continua só com a placa."""
+    hash_busca = gerar_hash_placa(placa)
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.pin_hash FROM contas c
+        JOIN usuarios u ON u.conta_id = c.id
+        WHERE u.hash_usuario = %s
+    """, (hash_busca,))
+    resultado = cursor.fetchone()
+    conn.close()
+    return (
+        resultado is not None
+        and resultado[0] is not None
+        and resultado[0] == gerar_hash_pin(pin)
+    )
+
+
+def vincular_placa(placa_existente: str, placa_nova: str, pin: str) -> bool:
     """Registra placa_nova na MESMA conta de placa_existente — pra motorista
-    com mais de um carro. placa_existente precisa já estar cadastrada;
-    placa_nova não pode já pertencer a outra conta."""
+    com mais de um carro. Exige o PIN da conta (prova de que quem está
+    pedindo é o dono, não só alguém que sabe a placa existente)."""
+    if not validar_pin(placa_existente, pin):
+        return False
+
     hash_existente = gerar_hash_placa(placa_existente)
     hash_novo = gerar_hash_placa(placa_nova)
 
