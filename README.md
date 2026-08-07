@@ -142,7 +142,7 @@ Com a API do passo 6 rodando, abra estes arquivos direto no navegador (duplo cli
 
 - **Landing page** — `entregas/index.html`: escolhe entre motorista, minha conta ou administrador.
 - **Totem** — `entregas/files/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número).
-- **App do motorista** — `entregas/app/index.html`: login com uma das placas de teste acima — mostra histórico de pagamentos e o chat.
+- **App do motorista** — `entregas/app/index.html`: login com uma das placas de teste acima **e o PIN `0000`** (PIN de teste de todas as 4 contas — troque antes de uma apresentação real) — mostra histórico de pagamentos e o chat.
 - **Dashboard (gestor)** — `entregas/frontend/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real).
 
 ### 9. Testar a API direto, sem interface (mais rápido pra conferir um endpoint isolado)
@@ -232,7 +232,7 @@ Revisão feita e testada nesta rodada (todos os itens abaixo foram conferidos di
 - **Sem SQL Injection**: toda consulta no motor e na API usa parâmetros (`%s` do psycopg2), nenhuma faz concatenação/f-string de SQL — auditado arquivo por arquivo (`ev_chargegrid.py`, `api_server.py`, `chatbot.py`).
 - **Sem vazamento de hash/PII nas respostas**: nenhum endpoint retorna `senha_hash` nem `hash_usuario` — as respostas já usavam só a placa mascarada (LGPD), auditado endpoint por endpoint.
 - **Enumeração de usuário**: o login de admin já respondia com mensagem genérica ("Usuário ou senha inválidos") tanto pra usuário inexistente quanto senha errada — nenhuma mudança necessária aí. As mensagens ligadas a placa (`Credencial não autorizada`, `já estava cadastrado`) não foram alteradas de propósito: placa não é segredo (é informação pública, visível no próprio carro), então o modelo clássico de "enumeração de usuário" não se aplica da mesma forma — o motorista *precisa* saber se a própria placa está cadastrada pra usar o totem.
-- **IDOR conhecido, não corrigido — decisão em aberto**: `GET /api/usuarios/<placa>/historico` não verifica se quem pede o histórico é o dono da placa. Como o "login" do motorista é só digitar a placa (sem senha nem segundo fator, por design), qualquer pessoa que souber uma placa vê o histórico de pagamento dela. O rate limit acima só encarece uma coleta em massa, não resolve o problema de fundo. Resolver de verdade exigiria adicionar um segredo ao login do motorista (PIN, código enviado por SMS/e-mail etc.) — uma mudança de UX nas 3 telas, não um patch pontual, por isso não foi feita sem alinhar antes.
+- **IDOR corrigido**: `GET /api/usuarios/<placa>/historico` virou `POST /api/usuarios/historico`, exigindo a placa **e** o PIN de 4 dígitos escolhido no cadastro (`contas.pin_hash`, mesmo padrão de hash das senhas de admin). Antes, saber a placa já bastava pra ver o histórico de qualquer motorista — a placa sozinha nunca foi um segredo de verdade. `/api/usuarios/vincular` (adicionar carro à conta) também passou a exigir o PIN, fechando uma falha relacionada (antes, saber uma placa cadastrada bastava pra vincular qualquer placa nova a ela). Iniciar/encerrar sessão no totem continua só com a placa, sem PIN — não é dado sensível, e pedir PIN ali atrasaria o fluxo que precisa ser rápido.
 
 ## Limitações conhecidas
 
@@ -241,7 +241,6 @@ Revisão feita e testada nesta rodada (todos os itens abaixo foram conferidos di
 - Sem `.env` configurado (veja "Configuração"), nada roda — nem a API, nem o chatbot.
 - Sem testes automatizados para as funções que leem/escrevem no Postgres (só as pura-lógica e a demo, com o banco mockado) — cobrir isso exigiria um banco de teste descartável, que ainda não existe.
 - Token de sessão do admin fica só em memória do processo da API (mesma limitação estrutural do `potencia_kw`, já documentada no código) — reiniciar a API desloga todo admin logado. O logout explícito (novo) já revoga o token antes disso, o que faltava.
-- **IDOR no histórico de pagamentos** (`/api/usuarios/<placa>/historico`) — ver seção "Segurança" acima. É a limitação de segurança mais séria do sistema hoje.
 - Rate limiting guarda o estado em memória do processo — um deploy com múltiplos workers/instâncias precisaria de um storage compartilhado (Redis) pra o limite valer entre eles; com 1 processo (o caso de hoje), funciona normalmente.
 
 ## Deploy (opcional)
