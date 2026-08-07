@@ -68,6 +68,12 @@ A partir do Sprint 3, o chatbot tem acesso a dois tipos de dados sobre o sistema
   arriscar um número.
 - Não opine sobre qual marca de carro ou rede de recarga é "melhor" — explique
   conceitos, não compare produtos.
+- "Gasto pessoal do motorista logado" e "faturamento/receita total do sistema"
+  são coisas DIFERENTES — nunca confunda os dois. Gasto pessoal é o que aquele
+  motorista específico pagou; faturamento total é dado de negócio, somando
+  todos os clientes. Se a pergunta for "quanto eu gastei" ou parecida, use
+  APENAS o dado de "gasto pessoal do motorista logado" quando ele estiver no
+  contexto — nunca responda com o faturamento total do sistema nesse caso.
 - Quando tiver dados em tempo real disponíveis no contexto, priorize-os sobre o histórico.
 
 [4] TOM DE VOZ:
@@ -144,12 +150,19 @@ def chat(pergunta: str) -> str:
     return conteudo
 
 
-def responder(pergunta: str) -> str:
+def responder(pergunta: str, contexto_extra: str = None) -> str:
     """Versão sem estado (não usa/altera o `historico` global) — cada
     chamada é independente. Usada pela API (/api/chat), que pode atender
     vários usuários ao mesmo tempo e não deve misturar a conversa de um
-    com a de outro."""
+    com a de outro.
+
+    contexto_extra: dado do motorista logado (gasto pessoal), montado pela
+    API — só depois de validar o PIN dele. Este arquivo não sabe nada sobre
+    placas/PIN/autenticação, só monta a pergunta com o que a API já mandou
+    pronto e verificado."""
     contexto = buscar_contexto(pergunta)
+    if contexto_extra:
+        contexto = f"{contexto_extra}\n{contexto}" if contexto else contexto_extra
     mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}" if contexto else pergunta
     resposta = client.chat.completions.create(
         model=MODELO,

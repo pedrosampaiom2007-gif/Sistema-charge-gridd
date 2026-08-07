@@ -420,12 +420,37 @@ def api_admin_logout():
 
 @app.post("/api/chat")
 def api_chat():
+    """placa+pin são opcionais — só o app do motorista (já logado) manda os
+    dois, pra o chat conseguir responder sobre o gasto PESSOAL de quem está
+    perguntando, sem confundir com o faturamento total do sistema (bug real
+    encontrado testando: perguntar "quanto eu gastei" respondia com a
+    receita do sistema inteiro, R$ 2701,43, porque o chat não sabia quem
+    estava perguntando). Exige o mesmo PIN do histórico — sem isso, dava
+    pra usar o chat pra contornar a checagem de PIN que /api/usuarios/historico
+    já tem."""
     dados = request.get_json(force=True) or {}
     pergunta = (dados.get("pergunta") or "").strip()
+    placa = (dados.get("placa") or "").strip()
+    pin = (dados.get("pin") or "").strip()
     if not pergunta:
         return jsonify({"erro": "Pergunta é obrigatória."}), 400
+
+    contexto_extra = None
+    if placa and pin:
+        if not cg.validar_pin(placa, pin):
+            return jsonify({"erro": "Placa ou PIN incorretos."}), 403
+        sessoes = cg.historico_usuario(placa)
+        total_pessoal = sum(s["valor"] for s in sessoes)
+        contexto_extra = (
+            f"[GASTO PESSOAL DO MOTORISTA LOGADO — placa {placa.upper()}] "
+            f"Total já gasto por esse motorista em {len(sessoes)} sessão(ões): "
+            f"R$ {total_pessoal:.2f}. Isso é o gasto individual DESSE motorista, "
+            f"diferente do faturamento/receita total do sistema (que soma todos "
+            f"os clientes)."
+        )
+
     try:
-        resposta = chatbot.responder(pergunta)
+        resposta = chatbot.responder(pergunta, contexto_extra=contexto_extra)
     except Exception as e:
         return jsonify({"erro": f"Chatbot indisponível: {e}"}), 503
     return jsonify({"resposta": resposta})

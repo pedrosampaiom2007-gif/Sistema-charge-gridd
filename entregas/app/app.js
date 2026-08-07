@@ -205,10 +205,12 @@ async function enviarPergunta() {
   const temp = adicionarMensagem("bot", "Pensando...", true);
 
   try {
+    // Manda a placa/PIN de quem já está logado, senão o chat não tem como
+    // saber de quem é "meu gasto" e mistura com o faturamento do sistema.
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pergunta }),
+      body: JSON.stringify({ pergunta, placa: placaAtual, pin: pinAtual }),
     });
     const data = await res.json();
     temp.remove();
