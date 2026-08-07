@@ -436,7 +436,8 @@ def api_chat():
         return jsonify({"erro": "Pergunta é obrigatória."}), 400
 
     contexto_extra = None
-    if placa and pin:
+    modo_motorista = bool(placa and pin)
+    if modo_motorista:
         if not cg.validar_pin(placa, pin):
             return jsonify({"erro": "Placa ou PIN incorretos."}), 403
         sessoes = cg.historico_usuario(placa)
@@ -450,7 +451,10 @@ def api_chat():
         )
 
     try:
-        resposta = chatbot.responder(pergunta, contexto_extra=contexto_extra)
+        # modo_motorista=True (placa+PIN validados) omite dado de negócio
+        # agregado do sistema — mesma fronteira que /api/kpis já aplica pro
+        # dashboard, agora valendo pro chat também.
+        resposta = chatbot.responder(pergunta, contexto_extra=contexto_extra, modo_motorista=modo_motorista)
     except Exception as e:
         return jsonify({"erro": f"Chatbot indisponível: {e}"}), 503
     return jsonify({"resposta": resposta})

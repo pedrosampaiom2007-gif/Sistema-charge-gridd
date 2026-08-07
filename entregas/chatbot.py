@@ -74,6 +74,10 @@ A partir do Sprint 3, o chatbot tem acesso a dois tipos de dados sobre o sistema
   todos os clientes. Se a pergunta for "quanto eu gastei" ou parecida, use
   APENAS o dado de "gasto pessoal do motorista logado" quando ele estiver no
   contexto — nunca responda com o faturamento total do sistema nesse caso.
+- Se perguntarem sobre faturamento, receita, ticket médio ou qualquer outro
+  número de negócio do sistema e esse dado NÃO estiver no contexto fornecido,
+  não invente nem estime — diga que essa informação é restrita à gestão e
+  não está disponível por aqui.
 - Quando tiver dados em tempo real disponíveis no contexto, priorize-os sobre o histórico.
 
 [4] TOM DE VOZ:
@@ -94,7 +98,16 @@ PALAVRAS_TEMPO_REAL = [
 ]
 
 
-def buscar_contexto(pergunta: str) -> str:
+def buscar_contexto(pergunta: str, modo_motorista: bool = False) -> str:
+    """modo_motorista=True: quem pergunta é um motorista logado no app, não
+    uso interno/admin. Nesse caso omite dado de negócio agregado —
+    faturamento, contagem de sessões do dia, dado de OUTRAS sessões/clientes
+    ativos, e todo o histórico de negócio do RAG (receita por carregador,
+    ticket médio etc.). É o mesmo motivo de /api/kpis exigir login de admin
+    no dashboard: um motorista não devia conseguir puxar o faturamento da
+    empresa só perguntando pro chat. Disponibilidade das estações (livre/
+    ocupada) continua visível — isso não é dado de negócio, é a mesma coisa
+    que qualquer um vê parado na frente do totem."""
     pergunta_lower = pergunta.lower()
     usa_tempo_real = any(p in pergunta_lower for p in PALAVRAS_TEMPO_REAL)
 
@@ -102,29 +115,31 @@ def buscar_contexto(pergunta: str) -> str:
 
     if usa_tempo_real:
         try:
-            sessoes_ativas = listar_sessoes_ativas()
             status_estacoes = obter_status_estacoes()
-            faturamento_hoje = obter_faturamento_dia()
-            sessoes_hoje = contar_sessoes_dia()
-
             livres = [k for k, v in status_estacoes.items() if v == "Livre"]
             ocupadas = [k for k, v in status_estacoes.items() if v == "Ocupada"]
 
-            partes.append("[DADOS EM TEMPO REAL — banco Postgres]")
+            partes.append("[DISPONIBILIDADE DAS ESTAÇÕES — agora]")
             partes.append(f"Estações ocupadas agora: {ocupadas if ocupadas else 'nenhuma'}")
             partes.append(f"Estações livres agora: {livres}")
-            partes.append(f"Faturamento de hoje (sessões pagas): R$ {faturamento_hoje:.2f}")
-            partes.append(f"Total de sessões iniciadas hoje: {sessoes_hoje}")
 
-            for s in sessoes_ativas:
-                partes.append(
-                    f"Sessão ativa — Estação {s['estacao']}: usuário {s['usuario']}, "
-                    f"{s['kwh']:.2f} kWh consumidos, valor acumulado R$ {s['valor']:.2f}, "
-                    f"pagamento via {s['pagamento']}."
-                )
+            if not modo_motorista:
+                sessoes_ativas = listar_sessoes_ativas()
+                faturamento_hoje = obter_faturamento_dia()
+                sessoes_hoje = contar_sessoes_dia()
+
+                partes.append(f"Faturamento de hoje (sessões pagas): R$ {faturamento_hoje:.2f}")
+                partes.append(f"Total de sessões iniciadas hoje: {sessoes_hoje}")
+
+                for s in sessoes_ativas:
+                    partes.append(
+                        f"Sessão ativa — Estação {s['estacao']}: usuário {s['usuario']}, "
+                        f"{s['kwh']:.2f} kWh consumidos, valor acumulado R$ {s['valor']:.2f}, "
+                        f"pagamento via {s['pagamento']}."
+                    )
         except Exception as e:
             partes.append(f"[AVISO] Banco indisponível: {e}")
-    else:
+    elif not modo_motorista:
         palavras = pergunta_lower.split()
         relevantes = [doc for doc in documentos if any(p in doc.lower() for p in palavras)]
         if relevantes:
@@ -150,7 +165,7 @@ def chat(pergunta: str) -> str:
     return conteudo
 
 
-def responder(pergunta: str, contexto_extra: str = None) -> str:
+def responder(pergunta: str, contexto_extra: str = None, modo_motorista: bool = False) -> str:
     """Versão sem estado (não usa/altera o `historico` global) — cada
     chamada é independente. Usada pela API (/api/chat), que pode atender
     vários usuários ao mesmo tempo e não deve misturar a conversa de um
@@ -159,8 +174,11 @@ def responder(pergunta: str, contexto_extra: str = None) -> str:
     contexto_extra: dado do motorista logado (gasto pessoal), montado pela
     API — só depois de validar o PIN dele. Este arquivo não sabe nada sobre
     placas/PIN/autenticação, só monta a pergunta com o que a API já mandou
-    pronto e verificado."""
-    contexto = buscar_contexto(pergunta)
+    pronto e verificado.
+
+    modo_motorista: ver docstring de buscar_contexto — omite dado de
+    negócio agregado quando quem pergunta é um motorista, não uso interno."""
+    contexto = buscar_contexto(pergunta, modo_motorista=modo_motorista)
     if contexto_extra:
         contexto = f"{contexto_extra}\n{contexto}" if contexto else contexto_extra
     mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}" if contexto else pergunta
