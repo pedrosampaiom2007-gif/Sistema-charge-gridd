@@ -76,30 +76,27 @@ cg.inicializar_banco()
 # mesmo que o banco ainda mostre a sessão como ativa — permitindo iniciar uma
 # segunda sessão na mesma estação física e duplicar a linha no banco.
 def _recuperar_sessoes_ativas():
-    import psycopg2
-    conn = psycopg2.connect(cg.DATABASE_URL)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, id_estacao, usuario, hora_inicio, kwh_consumidos, valor_sessao, metodo_pagamento
-        FROM sessoes WHERE ativa = 1 ORDER BY id_estacao, id DESC
-    """)
-    vistas = set()
-    for id_db, id_estacao, usuario, hora_inicio, kwh, valor, pagamento in cursor.fetchall():
-        if id_estacao in vistas:
-            # sessão duplicada/travada de uma execução anterior — fecha, não é real
-            cursor.execute("UPDATE sessoes SET ativa = 0 WHERE id = %s", (id_db,))
-            continue
-        vistas.add(id_estacao)
-        e = cg.estacoes[id_estacao - 1]
-        e.id_usuario = usuario
-        e.hora_inicio = hora_inicio
-        e.ativa = True
-        e.kwh_consumidos = kwh
-        e.valor_sessao = valor
-        e.metodo_pagamento = pagamento
-        e.id_sessao_db = id_db
-    conn.commit()
-    conn.close()
+    with cg.conectar() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, id_estacao, usuario, hora_inicio, kwh_consumidos, valor_sessao, metodo_pagamento
+            FROM sessoes WHERE ativa = 1 ORDER BY id_estacao, id DESC
+        """)
+        vistas = set()
+        for id_db, id_estacao, usuario, hora_inicio, kwh, valor, pagamento in cursor.fetchall():
+            if id_estacao in vistas:
+                # sessão duplicada/travada de uma execução anterior — fecha, não é real
+                cursor.execute("UPDATE sessoes SET ativa = 0 WHERE id = %s", (id_db,))
+                continue
+            vistas.add(id_estacao)
+            e = cg.estacoes[id_estacao - 1]
+            e.id_usuario = usuario
+            e.hora_inicio = hora_inicio
+            e.ativa = True
+            e.kwh_consumidos = kwh
+            e.valor_sessao = valor
+            e.metodo_pagamento = pagamento
+            e.id_sessao_db = id_db
     if vistas:
         cg.balancear_carga()
         print(f"[RECUPERACAO] {len(vistas)} sessão(ões) ativa(s) recuperada(s) do banco: estações {sorted(vistas)}")
@@ -161,9 +158,14 @@ def painel():
     """
     hora_atual = datetime.datetime.now().hour
 
-    status_por_estacao = cg.obter_status_estacoes()          # oficial (Raul)
+    # Uma consulta só ao banco: antes, obter_status_estacoes() chamava
+    # listar_sessoes_ativas() por dentro e a linha de baixo chamava de novo —
+    # duas idas ao Postgres por requisição, no endpoint que o totem e o
+    # dashboard consultam a cada 3-4 segundos.
+    lista_sessoes_ativas = cg.listar_sessoes_ativas()         # oficial (Raul)
+    status_por_estacao = cg.status_das_sessoes(lista_sessoes_ativas)
     potencia_por_estacao = cg.obter_potencia_estacoes()       # oficial (novo)
-    sessoes_ativas = {s["estacao"]: s for s in cg.listar_sessoes_ativas()}  # oficial (Raul)
+    sessoes_ativas = {s["estacao"]: s for s in lista_sessoes_ativas}
 
     estacoes_out = []
     for n in range(1, cg.MAX_ESTACOES + 1):
@@ -182,14 +184,16 @@ def painel():
             "iniciado_em_real": _INICIO_REAL.get(n) if ativa else None,
         })
 
+    # Sem receita_total nem consumo_total_diario_kwh aqui: esta rota é aberta
+    # (o totem, que não tem login, depende dela) e esses dois são número de
+    # negócio somando TODOS os clientes — mesma natureza do que /api/kpis já
+    # protege. Foram pra lá; o dashboard, que é logado, lê de lá.
     return jsonify({
         "estacoes": estacoes_out,
         "ativas": cg.contar_ativas(),
         "max_estacoes": cg.MAX_ESTACOES,
         "potencia_usada_kw": round(sum(potencia_por_estacao.values()), 2),
         "limite_potencia_grid_kw": cg.LIMITE_POTENCIA_GRID,
-        "receita_total": round(cg.receita_total, 2),
-        "consumo_total_diario_kwh": round(cg.consumo_total_diario, 2),
         "hora_atual": hora_atual,
         "demanda_ia_agora": round(cg.ia_prever_demanda(hora_atual), 2),
         "atualizado_em": datetime.datetime.now().isoformat(),
@@ -205,11 +209,16 @@ def _token_admin_valido() -> bool:
 def kpis():
     if not _token_admin_valido():
         return jsonify({"erro": "Login de administrador necessário."}), 401
+    sessoes_ativas = cg.listar_sessoes_ativas()
     return jsonify({
         "faturamento_dia": cg.obter_faturamento_dia(),
         "sessoes_dia": cg.contar_sessoes_dia(),
-        "sessoes_ativas": cg.listar_sessoes_ativas(),
-        "status_estacoes": cg.obter_status_estacoes(),
+        "sessoes_ativas": sessoes_ativas,
+        "status_estacoes": cg.status_das_sessoes(sessoes_ativas),
+        # vieram do /api/painel (aberto) pra cá: são agregados do negócio,
+        # não estado da estação que o totem precisa ver.
+        "receita_total": round(cg.receita_total, 2),
+        "consumo_total_diario_kwh": round(cg.consumo_total_diario, 2),
     })
 
 
@@ -248,19 +257,19 @@ def api_iniciar_sessao():
 
     uid_mascarado = cg.mascarar_id(uid)
     data_hoje = datetime.date.today().isoformat()
+    # Vincula a sessão à CONTA, não só à placa mascarada — é o que faz o
+    # histórico de pagamento apontar pro dono certo (ver historico_usuario).
+    conta_id = cg.conta_da_placa(uid)
 
-    import psycopg2
-    conn = psycopg2.connect(cg.DATABASE_URL)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO sessoes
-            (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa)
-        VALUES (%s, %s, %s, %s, %s, 'PENDENTE', 1)
-        RETURNING id
-    """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento))
-    id_gerado_db = cursor.fetchone()[0]
-    conn.commit()
-    conn.close()
+    with cg.conectar() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO sessoes
+                (id_estacao, usuario, data_sessao, hora_inicio, metodo_pagamento, status_pagamento, ativa, conta_id)
+            VALUES (%s, %s, %s, %s, %s, 'PENDENTE', 1, %s)
+            RETURNING id
+        """, (idx + 1, uid_mascarado, data_hoje, hora, pagamento, conta_id))
+        id_gerado_db = cursor.fetchone()[0]
 
     e = cg.estacoes[idx]
     e.id_usuario = uid_mascarado
@@ -300,7 +309,16 @@ def api_encerrar_sessao(estacao_num: int):
 
 @app.post("/api/tempo/avancar")
 def api_avancar_tempo():
-    """Equivalente à opção 2 do menu: avança +30min de simulação."""
+    """Equivalente à opção 2 do menu: avança +30min de simulação.
+
+    Exige login de administrador: essa rota MEXE EM DINHEIRO — cada chamada
+    soma kWh e reais em toda sessão ativa, ou seja, na conta que o motorista
+    vai pagar no fim. Sem login, qualquer um com a URL da API podia inflar a
+    fatura de todo mundo em looping. Nenhuma das três telas usa essa rota (o
+    próprio servidor avança o tempo sozinho, ver _loop_simulacao) — ela existe
+    como controle manual de demonstração."""
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
     cg.simular_tempo()
     return jsonify({"ok": True, "painel": painel().json})
 
@@ -310,6 +328,7 @@ def _pin_valido(pin: str) -> bool:
 
 
 @app.post("/api/usuarios")
+@limiter.limit("10 per minute")
 def api_cadastrar_usuario():
     dados = request.get_json(force=True) or {}
     placa = (dados.get("placa") or "").strip()
@@ -419,15 +438,24 @@ def api_admin_logout():
 # ─── Chatbot ────────────────────────────────────────────────────────────────
 
 @app.post("/api/chat")
+@limiter.limit("15 per minute")
 def api_chat():
-    """placa+pin são opcionais — só o app do motorista (já logado) manda os
-    dois, pra o chat conseguir responder sobre o gasto PESSOAL de quem está
-    perguntando, sem confundir com o faturamento total do sistema (bug real
-    encontrado testando: perguntar "quanto eu gastei" respondia com a
-    receita do sistema inteiro, R$ 2701,43, porque o chat não sabia quem
-    estava perguntando). Exige o mesmo PIN do histórico — sem isso, dava
-    pra usar o chat pra contornar a checagem de PIN que /api/usuarios/historico
-    já tem."""
+    """Quem pergunta define o que o chat enxerga:
+
+      - com token de admin  -> acesso de gestão: faturamento, sessões do dia,
+        histórico de receita. Mesma fronteira do /api/kpis.
+      - com placa + PIN     -> motorista logado: o gasto PESSOAL dele, mais
+        disponibilidade de estação e dúvidas gerais de carro elétrico.
+      - sem nada            -> só disponibilidade de estação e dúvidas gerais.
+
+    O padrão é o MAIS restrito de propósito. Antes era o contrário: o acesso
+    de gestão era o padrão e a restrição só ligava quando o motorista se
+    identificava — ou seja, bastava chamar /api/chat sem placa nenhuma pra
+    receber o faturamento do sistema. Quem se identificava via menos que um
+    anônimo.
+
+    O gasto pessoal exige o mesmo PIN do histórico: sem isso, dava pra usar o
+    chat pra contornar a checagem que /api/usuarios/historico já faz."""
     dados = request.get_json(force=True) or {}
     pergunta = (dados.get("pergunta") or "").strip()
     placa = (dados.get("placa") or "").strip()
@@ -435,9 +463,10 @@ def api_chat():
     if not pergunta:
         return jsonify({"erro": "Pergunta é obrigatória."}), 400
 
+    acesso_gestao = _token_admin_valido()
     contexto_extra = None
-    modo_motorista = bool(placa and pin)
-    if modo_motorista:
+
+    if placa and pin:
         if not cg.validar_pin(placa, pin):
             return jsonify({"erro": "Placa ou PIN incorretos."}), 403
         sessoes = cg.historico_usuario(placa)
@@ -451,10 +480,11 @@ def api_chat():
         )
 
     try:
-        # modo_motorista=True (placa+PIN validados) omite dado de negócio
-        # agregado do sistema — mesma fronteira que /api/kpis já aplica pro
-        # dashboard, agora valendo pro chat também.
-        resposta = chatbot.responder(pergunta, contexto_extra=contexto_extra, modo_motorista=modo_motorista)
+        resposta = chatbot.responder(
+            pergunta,
+            contexto_extra=contexto_extra,
+            acesso_gestao=acesso_gestao,
+        )
     except Exception as e:
         return jsonify({"erro": f"Chatbot indisponível: {e}"}), 503
     return jsonify({"resposta": resposta})

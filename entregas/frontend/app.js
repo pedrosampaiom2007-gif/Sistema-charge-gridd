@@ -1,8 +1,12 @@
 // ─── Configuração ────────────────────────────────────────────────────────────
 // file:// ou localhost = ambiente de teste local, aponta pra API local;
 // qualquer outro host (site publicado) aponta pra API publicada no Render.
+// 127.0.0.1 e não "localhost" de propósito: no Windows, "localhost" resolve
+// primeiro pra IPv6 (::1), o servidor Flask escuta em IPv4, e cada chamada
+// perde ~1,8s tentando o endereço errado antes de cair no certo — medido.
+// Como a tela consulta a API a cada 3s, isso deixava o painel sempre atrasado.
 const API_BASE = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
-  ? "http://localhost:5000"
+  ? "http://127.0.0.1:5000"
   : "https://chargegrid-api.onrender.com";
 const POLL_MS = 4000;
 const MAX_POTENCIA_ESTACAO = 22.0; // espelha MAX_POTENCIA_ESTACAO do backend
@@ -251,8 +255,10 @@ async function refresh() {
       `${fmtMoeda(kpis.faturamento_dia)}`;
     document.getElementById("kpi-sessoes").textContent = kpis.sessoes_dia;
     document.getElementById("kpi-ativas").innerHTML = `${painel.ativas}<span class="unit">/ ${painel.max_estacoes}</span>`;
+    // consumo do dia vem do /api/kpis (logado), não do /api/painel (aberto):
+    // é número agregado do negócio, e o painel é a rota que o totem usa.
     document.getElementById("kpi-consumo").innerHTML =
-      `${painel.consumo_total_diario_kwh.toFixed(1)}<span class="unit">kWh</span>`;
+      `${kpis.consumo_total_diario_kwh.toFixed(1)}<span class="unit">kWh</span>`;
 
     renderEstacoes(painel.estacoes);
 

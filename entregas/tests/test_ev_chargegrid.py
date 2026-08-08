@@ -151,13 +151,21 @@ class TestDemonstracaoFechaTodasAsSessoes(unittest.TestCase):
     tearDown = setUp
 
     def _rodar_demo_mockada(self):
-        with patch("ev_chargegrid.psycopg2.connect") as mock_connect:
-            mock_cursor = MagicMock()
-            mock_cursor.fetchone.side_effect = [(i,) for i in range(1, 1000)]
-            mock_connect.return_value.cursor.return_value = mock_cursor
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [(i,) for i in range(1, 1000)]
+
+        @contextlib.contextmanager
+        def conexao_falsa(somente_leitura=False):
+            conn = MagicMock()
+            conn.cursor.return_value = mock_cursor
+            yield conn
+
+        # O mock passou a ser em cg.conectar (o pool de conexões) e não mais em
+        # psycopg2.connect: o motor não abre conexão direta em lugar nenhum.
+        with patch("ev_chargegrid.conectar", conexao_falsa):
             with contextlib.redirect_stdout(io.StringIO()):
                 cg.demonstracao_comercial()
-            return mock_cursor
+        return mock_cursor
 
     def test_todas_as_4_estacoes_ficam_inativas_apos_a_demo(self):
         self._rodar_demo_mockada()
@@ -171,6 +179,82 @@ class TestDemonstracaoFechaTodasAsSessoes(unittest.TestCase):
             if "UPDATE sessoes SET status_pagamento" in chamada.args[0]
         ]
         self.assertEqual(len(updates_pagamento), 4)
+
+
+class TestStatusDasSessoes(unittest.TestCase):
+    """status_das_sessoes deriva o mesmo resultado de obter_status_estacoes()
+    a partir de uma lista já em mãos, sem ir ao banco — é o que tirou a
+    consulta duplicada do /api/painel."""
+
+    def test_marca_ocupada_so_o_que_tem_sessao(self):
+        status = cg.status_das_sessoes([{"estacao": 2}, {"estacao": 7}])
+        self.assertEqual(status[2], "Ocupada")
+        self.assertEqual(status[7], "Ocupada")
+        self.assertEqual(status[1], "Livre")
+
+    def test_cobre_todas_as_estacoes(self):
+        status = cg.status_das_sessoes([])
+        self.assertEqual(len(status), cg.MAX_ESTACOES)
+        self.assertTrue(all(v == "Livre" for v in status.values()))
+
+
+class TestBuscaDoRag(unittest.TestCase):
+    """Regressão da busca do RAG: ela casava qualquer palavra da pergunta,
+    inclusive "o"/"de"/"e", então quase toda pergunta trazia os mesmos 5
+    documentos de receita — inclusive perguntas sobre bateria de carro
+    elétrico, que não têm nada a ver com o histórico comercial."""
+
+    def setUp(self):
+        # importado aqui (e não no topo) porque só este teste precisa do
+        # chatbot; o resto do arquivo testa só o motor.
+        import chatbot
+        self.chatbot = chatbot
+
+    def test_ignora_palavras_vazias(self):
+        self.assertEqual(self.chatbot._palavras_uteis("o que e isso de a"), [])
+
+    def test_pergunta_sem_relacao_nao_traz_documento(self):
+        self.assertEqual(self.chatbot.buscar_documentos("quanto dura a bateria do meu carro"), [])
+
+    def test_pergunta_sobre_o_negocio_traz_documento(self):
+        docs = self.chatbot.buscar_documentos("qual o ticket medio historico")
+        self.assertTrue(docs)
+        self.assertTrue(all("ticket" in d.lower() for d in docs))
+
+    def test_ignora_acento(self):
+        com_acento = self.chatbot.buscar_documentos("qual a receita por sessões")
+        sem_acento = self.chatbot.buscar_documentos("qual a receita por sessoes")
+        self.assertEqual(com_acento, sem_acento)
+        self.assertTrue(com_acento)
+
+    def test_ordena_pelo_numero_de_termos_que_casam(self):
+        docs = self.chatbot.buscar_documentos("dlb variancia consumo")
+        self.assertTrue(docs)
+        self.assertIn("DLB", docs[0])
+
+
+class TestAcessoAoContextoDeNegocio(unittest.TestCase):
+    """O contexto do chat é fail-closed: sem acesso_gestao explícito, nenhum
+    número de negócio entra na resposta. Antes era o contrário — o acesso
+    total era o padrão e a restrição era opt-in."""
+
+    def setUp(self):
+        import chatbot
+        self.chatbot = chatbot
+
+    def test_padrao_nao_inclui_historico_comercial(self):
+        contexto = self.chatbot.buscar_contexto("qual o ticket medio historico")
+        self.assertEqual(contexto, "")
+
+    def test_gestao_inclui_historico_comercial(self):
+        contexto = self.chatbot.buscar_contexto("qual o ticket medio historico", acesso_gestao=True)
+        self.assertIn("DADOS HISTÓRICOS", contexto)
+
+    def test_padrao_mostra_disponibilidade_mas_nao_faturamento(self):
+        with patch.object(self.chatbot, "obter_status_estacoes", return_value={1: "Livre", 2: "Ocupada"}):
+            contexto = self.chatbot.buscar_contexto("tem estação livre agora?")
+        self.assertIn("DISPONIBILIDADE", contexto)
+        self.assertNotIn("Faturamento", contexto)
 
 
 if __name__ == "__main__":

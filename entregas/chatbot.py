@@ -14,6 +14,7 @@ Como rodar:
 
 import os
 import json
+import unicodedata
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -27,7 +28,10 @@ from ev_chargegrid import (
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
 
-inicializar_banco()  # garante que o banco existe antes de qualquer leitura
+# inicializar_banco() é chamado em main() (terminal), não no import: a API já
+# inicializa o banco por conta própria e importa este arquivo — fazer no import
+# era uma segunda ida ao Postgres em toda subida do servidor, e impedia
+# importar o chatbot (pra testar a busca do RAG, por exemplo) sem banco no ar.
 
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(PASTA_ATUAL, "dados_rag.json"), "r", encoding="utf-8") as f:
@@ -35,8 +39,30 @@ with open(os.path.join(PASTA_ATUAL, "dados_rag.json"), "r", encoding="utf-8") as
 
 documentos = dados_rag["frases_contexto_rag"]
 
-client = Groq(api_key=os.environ["GROQ_API_KEY"])
 MODELO = "llama-3.1-8b-instant"
+
+# O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
+# Antes ele era criado no import, lendo os.environ["GROQ_API_KEY"] direto: se
+# a chave não estivesse configurada (chave rotacionada, deploy novo em que
+# esqueceram a variável), o import estourava KeyError e derrubava a API
+# INTEIRA junto — totem, dashboard, sessões, pagamento. A chave do chat não
+# pode ser capaz de parar a recarga; agora só o /api/chat falha, com uma
+# mensagem que diz exatamente o que fazer.
+_client = None
+
+
+def obter_client() -> Groq:
+    global _client
+    if _client is None:
+        chave = os.environ.get("GROQ_API_KEY", "").strip()
+        if not chave:
+            raise RuntimeError(
+                "GROQ_API_KEY não configurada — o assistente precisa dela. "
+                "Defina no .env (uso local) ou nas variáveis de ambiente do "
+                "serviço (deploy). O resto do sistema funciona sem ela."
+            )
+        _client = Groq(api_key=chave)
+    return _client
 
 SYSTEM_PROMPT = """
 [1] IDENTIDADE:
@@ -97,17 +123,94 @@ PALAVRAS_TEMPO_REAL = [
     "disponível", "carregando"
 ]
 
+# Palavras que aparecem em qualquer frase e não dizem nada sobre o assunto.
+# Sem essa lista, "o", "de" e "e" casavam com quase todo documento do RAG e a
+# busca devolvia sempre os 5 primeiros — perguntar sobre bateria de carro
+# elétrico trazia receita por carregador como "contexto".
+_STOPWORDS = {
+    "a", "as", "ao", "aos", "com", "como", "da", "das", "de", "do", "dos", "e",
+    "ele", "ela", "em", "essa", "esse", "esta", "este", "eu", "foi", "ha",
+    "isso", "ja", "la", "mais", "mas", "me", "meu", "minha", "muito", "na",
+    "nao", "nas", "no", "nos", "num", "o", "os", "ou", "para", "pela", "pelo",
+    "por", "pra", "pro", "qual", "quais", "quando", "quanto", "quantos", "que",
+    "se", "sem", "ser", "sao", "so", "sua", "seu", "tem", "ter", "um", "uma",
+    "voce", "vc",
+}
 
-def buscar_contexto(pergunta: str, modo_motorista: bool = False) -> str:
-    """modo_motorista=True: quem pergunta é um motorista logado no app, não
-    uso interno/admin. Nesse caso omite dado de negócio agregado —
-    faturamento, contagem de sessões do dia, dado de OUTRAS sessões/clientes
-    ativos, e todo o histórico de negócio do RAG (receita por carregador,
-    ticket médio etc.). É o mesmo motivo de /api/kpis exigir login de admin
-    no dashboard: um motorista não devia conseguir puxar o faturamento da
-    empresa só perguntando pro chat. Disponibilidade das estações (livre/
-    ocupada) continua visível — isso não é dado de negócio, é a mesma coisa
-    que qualquer um vê parado na frente do totem."""
+
+def _normalizar(texto: str) -> str:
+    """minúsculas e sem acento — pra "sessões" casar com "sessoes", que é como
+    a maioria das pessoas digita no celular."""
+    sem_acento = unicodedata.normalize("NFKD", texto.lower())
+    return "".join(c for c in sem_acento if not unicodedata.combining(c))
+
+
+def _tokenizar(texto: str) -> list[str]:
+    """Quebra em palavras, sem acento e sem pontuação. Trabalhar com palavras
+    inteiras (e não com "está contido no texto") evita casamento por pedaço:
+    "dura", de "quanto dura a bateria", casava com "duração média" e trazia
+    dado de receita pra uma pergunta sobre bateria."""
+    palavra = []
+    palavras = []
+    for c in _normalizar(texto):
+        if c.isalnum():
+            palavra.append(c)
+        elif palavra:
+            palavras.append("".join(palavra))
+            palavra = []
+    if palavra:
+        palavras.append("".join(palavra))
+    return palavras
+
+
+def _palavras_uteis(pergunta: str) -> list[str]:
+    return [p for p in _tokenizar(pergunta) if len(p) >= 3 and p not in _STOPWORDS]
+
+
+def _casa(termo: str, palavras_doc: set[str]) -> bool:
+    # Palavra igual, ou o documento tem uma variação que começa com o termo
+    # ("carregador" casa com "carregadores"). O mínimo de 5 letras pro prefixo
+    # é o que impede pedaço curto de casar com qualquer coisa.
+    if termo in palavras_doc:
+        return True
+    return len(termo) >= 5 and any(p.startswith(termo) for p in palavras_doc)
+
+
+def buscar_documentos(pergunta: str, limite: int = 5) -> list[str]:
+    """Documentos do RAG ordenados por quantos termos da pergunta eles contêm.
+    Só entra quem casa com pelo menos um termo útil — se nada casar, devolve
+    lista vazia em vez de contexto aleatório (contexto errado é pior que
+    contexto nenhum: o modelo tenta usar o que recebeu)."""
+    termos = _palavras_uteis(pergunta)
+    if not termos:
+        return []
+
+    pontuados = []
+    for doc in documentos:
+        palavras_doc = set(_tokenizar(doc))
+        pontos = sum(1 for t in termos if _casa(t, palavras_doc))
+        if pontos:
+            pontuados.append((pontos, doc))
+
+    pontuados.sort(key=lambda par: par[0], reverse=True)
+    return [doc for _, doc in pontuados[:limite]]
+
+
+def buscar_contexto(pergunta: str, acesso_gestao: bool = False) -> str:
+    """Monta o contexto que vai junto da pergunta pro modelo.
+
+    acesso_gestao=False (padrão): só disponibilidade das estações (livre/
+    ocupada) — que é a mesma coisa que qualquer pessoa enxerga parada na
+    frente do totem — e nada de dado de negócio.
+
+    acesso_gestao=True: também faturamento, contagem de sessões do dia, as
+    sessões ativas dos outros clientes e o histórico comercial do RAG
+    (receita por carregador, ticket médio). Só o dashboard logado e as
+    ferramentas internas da equipe (chatbot.py no terminal, notebook)
+    chegam nesse modo — mesma fronteira que /api/kpis aplica.
+
+    O padrão é o restrito de propósito: qualquer chamada nova que esqueça de
+    passar o parâmetro vaza menos, não mais."""
     pergunta_lower = pergunta.lower()
     usa_tempo_real = any(p in pergunta_lower for p in PALAVRAS_TEMPO_REAL)
 
@@ -123,7 +226,7 @@ def buscar_contexto(pergunta: str, modo_motorista: bool = False) -> str:
             partes.append(f"Estações ocupadas agora: {ocupadas if ocupadas else 'nenhuma'}")
             partes.append(f"Estações livres agora: {livres}")
 
-            if not modo_motorista:
+            if acesso_gestao:
                 sessoes_ativas = listar_sessoes_ativas()
                 faturamento_hoje = obter_faturamento_dia()
                 sessoes_hoje = contar_sessoes_dia()
@@ -139,12 +242,11 @@ def buscar_contexto(pergunta: str, modo_motorista: bool = False) -> str:
                     )
         except Exception as e:
             partes.append(f"[AVISO] Banco indisponível: {e}")
-    elif not modo_motorista:
-        palavras = pergunta_lower.split()
-        relevantes = [doc for doc in documentos if any(p in doc.lower() for p in palavras)]
+    elif acesso_gestao:
+        relevantes = buscar_documentos(pergunta)
         if relevantes:
             partes.append("[DADOS HISTÓRICOS — planilha SP2, 60 sessões reais]")
-            partes.extend(relevantes[:5])
+            partes.extend(relevantes)
 
     return "\n".join(partes)
 
@@ -153,19 +255,22 @@ historico = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
 def chat(pergunta: str) -> str:
-    contexto = buscar_contexto(pergunta)
+    """Versão com memória de conversa, usada só pelo terminal deste arquivo e
+    pelo notebook — ferramenta interna da equipe, por isso com acesso de
+    gestão. O que o motorista usa no app é a API, que chama responder()."""
+    contexto = buscar_contexto(pergunta, acesso_gestao=True)
     if contexto:
         mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}"
     else:
         mensagem = pergunta
     historico.append({"role": "user", "content": mensagem})
-    resposta = client.chat.completions.create(model=MODELO, messages=historico)
+    resposta = obter_client().chat.completions.create(model=MODELO, messages=historico)
     conteudo = resposta.choices[0].message.content
     historico.append({"role": "assistant", "content": conteudo})
     return conteudo
 
 
-def responder(pergunta: str, contexto_extra: str = None, modo_motorista: bool = False) -> str:
+def responder(pergunta: str, contexto_extra: str = None, acesso_gestao: bool = False) -> str:
     """Versão sem estado (não usa/altera o `historico` global) — cada
     chamada é independente. Usada pela API (/api/chat), que pode atender
     vários usuários ao mesmo tempo e não deve misturar a conversa de um
@@ -176,13 +281,13 @@ def responder(pergunta: str, contexto_extra: str = None, modo_motorista: bool = 
     placas/PIN/autenticação, só monta a pergunta com o que a API já mandou
     pronto e verificado.
 
-    modo_motorista: ver docstring de buscar_contexto — omite dado de
-    negócio agregado quando quem pergunta é um motorista, não uso interno."""
-    contexto = buscar_contexto(pergunta, modo_motorista=modo_motorista)
+    acesso_gestao: ver docstring de buscar_contexto. Padrão False = o mínimo
+    de acesso; a API só passa True quando o token de admin foi validado."""
+    contexto = buscar_contexto(pergunta, acesso_gestao=acesso_gestao)
     if contexto_extra:
         contexto = f"{contexto_extra}\n{contexto}" if contexto else contexto_extra
     mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}" if contexto else pergunta
-    resposta = client.chat.completions.create(
+    resposta = obter_client().chat.completions.create(
         model=MODELO,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -193,6 +298,7 @@ def responder(pergunta: str, contexto_extra: str = None, modo_motorista: bool = 
 
 
 def main() -> None:
+    inicializar_banco()  # garante que o banco existe antes de qualquer leitura
     print("ChargeGrid Intelligence — CGI Assistant (local)")
     print(f"RAG com {len(documentos)} fragmentos históricos indexados.")
     print("Digite 'sair' para encerrar.\n")
