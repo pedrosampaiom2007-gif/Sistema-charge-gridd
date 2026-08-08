@@ -145,9 +145,9 @@ cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
 Com a API do passo 6 rodando, abra estes arquivos direto no navegador (duplo clique no Explorador de Arquivos, ou arraste o arquivo pra uma aba do Chrome/Edge):
 
 - **Landing page** — `entregas/index.html`: escolhe entre motorista, minha conta ou administrador.
-- **Totem** — `entregas/files/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número).
+- **Totem** — `entregas/files/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número). Abaixo do botão "Iniciar recarga" aparece a tarifa do momento — entre 0h e 6h ela mostra desconto de madrugada.
 - **App do motorista** — `entregas/app/index.html`: login com uma das placas de teste acima **e o PIN `0000`** (PIN de teste de todas as 4 contas — troque antes de uma apresentação real) — mostra histórico de pagamentos e o chat.
-- **Dashboard (gestor)** — `entregas/frontend/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real).
+- **Dashboard (gestor)** — `entregas/frontend/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real). Em cada estação livre tem um link "Colocar em manutenção" (some enquanto a estação está ocupada); e um botão "Baixar relatório do dia" no topo da lista de estações baixa um `.txt` com o resumo do dia.
 
 ### 9. Testar a API direto, sem interface (mais rápido pra conferir um endpoint isolado)
 
@@ -155,19 +155,19 @@ No **segundo terminal** (passo 7):
 
 **Ver o painel das 10 estações:**
 ```powershell
-curl.exe http://localhost:5000/api/painel
+curl.exe http://127.0.0.1:5000/api/painel
 ```
 
 **Iniciar uma sessão de recarga** (estação 2, placa `ABC1D23`, 14h, Pix):
 ```powershell
 $body = @{ estacao = 2; usuario = "ABC1D23"; hora = 14; pagamento = "PIX" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:5000/api/sessoes/iniciar" -Method POST -ContentType "application/json" -Body $body
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/sessoes/iniciar" -Method POST -ContentType "application/json" -Body $body
 ```
 Repare que o `POST` usa `Invoke-RestMethod`, não `curl.exe -X POST -d ...` — no PowerShell, `curl` (sem `.exe`) é só um apelido de `Invoke-WebRequest` e a forma de escapar aspas dentro de `-d` varia por versão do Windows e costuma falhar silenciosamente com "Bad Request"; `Invoke-RestMethod` evita esse problema por completo.
 
 **Encerrar a sessão que acabou de abrir (gera o recibo simulado):**
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:5000/api/sessoes/2/encerrar" -Method POST
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/sessoes/2/encerrar" -Method POST
 ```
 
 Se qualquer um desses comandos travar sem responder, volte no terminal do passo 6 e confira se a API ainda está rodando sem erro na tela.
@@ -227,6 +227,7 @@ Se a API rodar em outro host/porta (não `127.0.0.1:5000`), ajuste a constante `
 - **Cadastro de novo motorista**: antes, uma placa não reconhecida travava sem nenhum caminho pra frente — o sistema só funcionava pras 4 placas de teste. Agora dá pra se cadastrar direto no totem (quando a placa não é reconhecida na hora de iniciar a recarga) ou no app (link "Ainda não tem cadastro?" na tela de login) — os dois usam o mesmo `POST /api/usuarios`.
 - **PIN de 4 dígitos** (escolhido no cadastro) protegendo o histórico de pagamento — ver "IDOR corrigido" na seção "Segurança".
 - **Chat sem vazar dado de negócio pro motorista**: o assistente, quando usado de dentro da conta do motorista (placa+PIN), não revela faturamento, receita histórica nem qualquer número agregado do sistema — só o gasto pessoal daquele motorista, disponibilidade de estação, e dúvidas gerais de carro elétrico. Achado testando com um usuário real fora da equipe — ver "Segurança".
+- **Manutenção de estação, tarifa de madrugada e relatório do dia pra download** — ver "Novidades" na seção "Segurança" abaixo pra detalhe técnico, e [`docs/BUSINESS_MODEL.md`](docs/BUSINESS_MODEL.md) pro modelo de negócio.
 
 ### Revisão profunda (auditoria de todos os módulos)
 
@@ -247,6 +248,16 @@ E o desempenho, que era o problema mais visível numa demonstração ao vivo:
 
 - **`/api/painel` levava ~5,5s** — e o totem e o dashboard consultam essa rota a cada 3-4 segundos, ou seja, uma consulta ainda estava no ar quando a próxima começava, e a tela vivia atrasada. Três causas, todas medidas: (1) cada função de leitura abria uma conexão nova no Supabase, e abrir conexão custa ~1,3s; (2) o painel consultava as sessões ativas duas vezes por requisição; (3) `localhost` no Windows resolve pra IPv6 primeiro, o Flask escuta em IPv4, e cada chamada perdia ~1,8s no endereço errado. Com pool de conexões, consulta única e `127.0.0.1` nos front-ends: **~0,3s, cerca de 18x mais rápido**.
 - Conexão vazada em qualquer erro: as funções fechavam a conexão na última linha, então uma exceção no meio deixava a conexão pendurada até estourar o limite do Supabase. O `conectar()` agora devolve sempre, e descarta a conexão que deu erro em vez de reaproveitar uma quebrada.
+
+### Novidades (comparação com o projeto de um colega no mesmo desafio)
+
+Depois de revisar o repositório de um projeto parecido de outro grupo no mesmo desafio (desktop local, sem nuvem, chatbot de palavra-chave — bem mais simples que o nosso em quase todo eixo técnico), três ideias de produto valiam a pena, reimplementadas do zero no nosso stack:
+
+- **Manutenção de estação** — terceiro estado além de Livre/Ocupada. `manutencao_estacoes` (Postgres, não em memória — um carregador quebrado continua quebrado depois da API reiniciar) guarda quais estações estão fora de circulação e por quê. O admin marca/desmarca pelo dashboard (`POST /api/estacoes/<n>/manutencao` e `.../manutencao/encerrar`, os dois exigindo login); o motor recusa marcar manutenção em cima de uma sessão ativa (`entrar_em_manutencao` retorna `False`) e nunca deixa a manutenção interromper quem já está carregando (`aplicar_manutencao` nunca sobrescreve "Ocupada"). O totem detecta o estado pelo `/api/painel` e bloqueia o fluxo de recarga inteiro antes mesmo do motorista digitar a placa — não só recusa no fim.
+- **Tarifa de madrugada com desconto** (`ia_calcular_tarifa`, 0h–6h, até 20% mais barato) — antes a tarifa dinâmica só subia no pico; agora também desce fora dele, o que é o argumento real de "tarifa dinâmica numa rede elétrica": não é só faturar mais no horário caro, é incentivar o motorista a mudar de horário e achatar a curva de demanda. Aparece pro motorista no totem (frase abaixo do botão "Iniciar recarga") e no dashboard (readout "Tarifa agora").
+- **Relatório do dia pra download** — `GET /api/relatorio` (admin-only, como o `/api/kpis`) monta um `.txt` com faturamento, sessões, ticket médio e consumo do dia, devolvido com `Content-Disposition: attachment` — o botão "Baixar relatório do dia" no dashboard busca via `fetch` (pra mandar o token) e baixa como arquivo.
+
+A quarta ideia — comissão/modelo de negócio documentado — virou [`docs/BUSINESS_MODEL.md`](docs/BUSINESS_MODEL.md), escrito do zero refletindo a arquitetura real daqui (nuvem, LLM real, PIN, deploy ao vivo), não uma tradução do outro projeto.
 
 ## Segurança
 
@@ -276,6 +287,7 @@ Revisão feita e testada nesta rodada (todos os itens abaixo foram conferidos di
 - **Iniciar e encerrar recarga não exigem login** — e isso é uma escolha, não um esquecimento. Num sistema real, quem garante que a sessão é legítima é o próprio carregador: ele só abre transação com um carro fisicamente plugado, e se identifica no servidor com credencial de equipamento (OCPP). Como o hardware aqui é simulado, não existe essa credencial pra checar, e pedir PIN no totem só atrasaria o fluxo sem impedir nada. Fica registrado como o que é: uma consequência de o carregador ser simulado, e não uma proteção que existe e está fraca. O que **não** depende de hardware — histórico, dado de negócio, avanço de tempo — está fechado.
 - O `modelo_demanda.pkl` foi treinado com scikit-learn 1.8.0 e hoje roda em 1.9.0; o scikit-learn avisa sobre isso a cada carregamento. Funciona, mas o aviso é legítimo — a garantia formal de resultado idêntico entre versões não existe. Regerar o `.pkl` na versão atual (notebook em `modelagem_ia/`) resolve.
 - O pool de conexões tem 5 conexões por processo. É suficiente pro uso de hoje (1 processo); subir o número de workers exige rever esse limite junto com o limite de conexões do plano do Supabase.
+- `/api/painel` voltou a fazer duas consultas ao banco por requisição (sessões ativas + `estacoes_em_manutencao`) — o estado de manutenção não podia ficar só em memória (senão sumiria ao reiniciar a API), então virou o único dado do painel que não dá pra buscar na mesma consulta das sessões. Isso subiu o tempo de resposta de ~0,3s pra ~0,6s (medido) — ainda rápido pra um poll a cada 3-4s, mas é o preço de ter esse terceiro estado persistido. Dava pra evitar cacheando o estado de manutenção em memória com invalidação manual, mas isso trocaria uma resposta simples e sempre correta por uma cache que pode ficar desatualizada — não valeu a complexidade pra um dado que muda raramente (o admin marcando/desmarcando manutenção, não a cada poll).
 
 ## Deploy (opcional)
 

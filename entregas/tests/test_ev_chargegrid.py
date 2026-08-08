@@ -81,6 +81,22 @@ class TestTarifacaoDinamica(unittest.TestCase):
         with patch.object(cg, "ia_prever_demanda", return_value=0.95):
             self.assertEqual(cg.ia_calcular_tarifa(hora=19, estacoes_ativas=3), 1.65)
 
+    def test_madrugada_aplica_desconto(self):
+        with patch.object(cg, "ia_prever_demanda", return_value=0.05):
+            for hora in range(cg.HORA_INICIO_MADRUGADA, cg.HORA_FIM_MADRUGADA):
+                self.assertEqual(cg.ia_calcular_tarifa(hora=hora, estacoes_ativas=1), 0.80)
+
+    def test_madrugada_nao_afeta_horario_normal(self):
+        with patch.object(cg, "ia_prever_demanda", return_value=0.5):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=cg.HORA_FIM_MADRUGADA, estacoes_ativas=1), 1.0)
+
+    def test_desconto_de_madrugada_nunca_passa_do_piso(self):
+        # mesmo se demanda alta empurrasse o fator pra cima, o desconto não
+        # pode deixar a tarifa abaixo de 0.80 — max() garante o piso.
+        with patch.object(cg, "ia_prever_demanda", return_value=0.99):
+            fator = cg.ia_calcular_tarifa(hora=3, estacoes_ativas=1)
+            self.assertGreaterEqual(fator, 0.80)
+
 
 class TestPrevisaoDemanda(unittest.TestCase):
     """Não trava no valor exato (depende do .pkl estar carregado ou cair no
@@ -179,6 +195,60 @@ class TestDemonstracaoFechaTodasAsSessoes(unittest.TestCase):
             if "UPDATE sessoes SET status_pagamento" in chamada.args[0]
         ]
         self.assertEqual(len(updates_pagamento), 4)
+
+
+class TestAplicarManutencao(unittest.TestCase):
+    """aplicar_manutencao é pura (recebe os dois dicts prontos, não toca no
+    banco) de propósito — pra poder testar a regra de negócio (nunca
+    sobrescrever Ocupada) sem precisar de conexão nenhuma."""
+
+    def test_sobrescreve_livre_com_manutencao(self):
+        status = {1: "Livre", 2: "Livre"}
+        em_manutencao = {1: {"motivo": "cabo danificado"}}
+        resultado = cg.aplicar_manutencao(status, em_manutencao)
+        self.assertEqual(resultado[1], "Manutenção")
+        self.assertEqual(resultado[2], "Livre")
+
+    def test_nunca_sobrescreve_ocupada(self):
+        # sessão em andamento não pode ser interrompida por uma manutenção
+        # marcada durante ela (entrar_em_manutencao já recusa isso, mas essa
+        # função é a segunda linha de defesa caso os dois fiquem inconsistentes)
+        status = {1: "Ocupada"}
+        em_manutencao = {1: {"motivo": None}}
+        resultado = cg.aplicar_manutencao(status, em_manutencao)
+        self.assertEqual(resultado[1], "Ocupada")
+
+    def test_sem_manutencao_nenhuma_nao_muda_nada(self):
+        status = {1: "Livre", 2: "Ocupada"}
+        resultado = cg.aplicar_manutencao(status, {})
+        self.assertEqual(resultado, status)
+
+
+class TestRelatorioDoDia(unittest.TestCase):
+    """relatorio_do_dia só agrupa números que já vêm de funções de leitura
+    testadas isoladamente — aqui a gente garante que o agrupamento (ticket
+    médio, principalmente) está certo, mockando as leituras."""
+
+    def test_agrupa_os_numeros_certos(self):
+        with patch.object(cg, "obter_faturamento_dia", return_value=245.80), \
+             patch.object(cg, "contar_sessoes_dia", return_value=6), \
+             patch.object(cg, "obter_consumo_dia", return_value=58.4), \
+             patch.object(cg, "contar_ativas", return_value=2):
+            r = cg.relatorio_do_dia("2026-08-08")
+        self.assertEqual(r["data"], "2026-08-08")
+        self.assertEqual(r["faturamento"], 245.80)
+        self.assertEqual(r["sessoes_dia"], 6)
+        self.assertAlmostEqual(r["ticket_medio"], 40.97, places=2)
+        self.assertEqual(r["consumo_kwh"], 58.4)
+        self.assertEqual(r["estacoes_ativas_agora"], 2)
+
+    def test_ticket_medio_zero_sem_sessao_nao_divide_por_zero(self):
+        with patch.object(cg, "obter_faturamento_dia", return_value=0.0), \
+             patch.object(cg, "contar_sessoes_dia", return_value=0), \
+             patch.object(cg, "obter_consumo_dia", return_value=0.0), \
+             patch.object(cg, "contar_ativas", return_value=0):
+            r = cg.relatorio_do_dia("2026-08-08")
+        self.assertEqual(r["ticket_medio"], 0.0)
 
 
 class TestStatusDasSessoes(unittest.TestCase):

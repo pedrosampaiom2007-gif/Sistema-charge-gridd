@@ -20,7 +20,7 @@ Como rodar:
   -> API sobe em http://localhost:5000
 """
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -164,8 +164,14 @@ def painel():
     # dashboard consultam a cada 3-4 segundos.
     lista_sessoes_ativas = cg.listar_sessoes_ativas()         # oficial (Raul)
     status_por_estacao = cg.status_das_sessoes(lista_sessoes_ativas)
+    em_manutencao = cg.estacoes_em_manutencao()
+    # Sobrepõe "Manutenção" por cima de Livre/Ocupada — nunca troca uma
+    # estação Ocupada (sessão em andamento termina normal, ver aplicar_manutencao).
+    status_por_estacao = cg.aplicar_manutencao(status_por_estacao, em_manutencao)
     potencia_por_estacao = cg.obter_potencia_estacoes()       # oficial (novo)
     sessoes_ativas = {s["estacao"]: s for s in lista_sessoes_ativas}
+
+    fator_tarifa = cg.ia_calcular_tarifa(hora_atual, cg.contar_ativas())
 
     estacoes_out = []
     for n in range(1, cg.MAX_ESTACOES + 1):
@@ -182,12 +188,17 @@ def painel():
             # ainda não coberto por uma função de leitura oficial:
             "hora_inicio": cg.estacoes[n - 1].hora_inicio if ativa else 0,
             "iniciado_em_real": _INICIO_REAL.get(n) if ativa else None,
+            "motivo_manutencao": em_manutencao.get(n, {}).get("motivo") if status_por_estacao[n] == "Manutenção" else None,
         })
 
     # Sem receita_total nem consumo_total_diario_kwh aqui: esta rota é aberta
     # (o totem, que não tem login, depende dela) e esses dois são número de
     # negócio somando TODOS os clientes — mesma natureza do que /api/kpis já
     # protege. Foram pra lá; o dashboard, que é logado, lê de lá.
+    #
+    # fator_tarifa_agora/tarifa_kwh_agora NÃO são dado de negócio (não somam
+    # clientes, não revelam faturamento) — são o preço público que qualquer
+    # motorista vê no totem antes de decidir carregar, então ficam aqui.
     return jsonify({
         "estacoes": estacoes_out,
         "ativas": cg.contar_ativas(),
@@ -196,6 +207,9 @@ def painel():
         "limite_potencia_grid_kw": cg.LIMITE_POTENCIA_GRID,
         "hora_atual": hora_atual,
         "demanda_ia_agora": round(cg.ia_prever_demanda(hora_atual), 2),
+        "fator_tarifa_agora": fator_tarifa,
+        "tarifa_kwh_agora": round(cg.TARIFA_BASE_KWH * fator_tarifa, 2),
+        "tarifa_madrugada_ativa": cg.HORA_INICIO_MADRUGADA <= hora_atual < cg.HORA_FIM_MADRUGADA,
         "atualizado_em": datetime.datetime.now().isoformat(),
     })
 
@@ -245,6 +259,8 @@ def api_iniciar_sessao():
         return jsonify({"erro": "Estação inexistente."}), 400
     if cg.estacoes[idx].ativa:
         return jsonify({"erro": "Estação já ocupada."}), 409
+    if cg.estacao_em_manutencao(idx + 1):
+        return jsonify({"erro": "Estação em manutenção."}), 409
     if uid != "ANONIMO" and not cg.validar_usuario(uid):
         return jsonify({"erro": f"Credencial '{uid}' não autorizada."}), 403
 
@@ -321,6 +337,72 @@ def api_avancar_tempo():
         return jsonify({"erro": "Login de administrador necessário."}), 401
     cg.simular_tempo()
     return jsonify({"ok": True, "painel": painel().json})
+
+
+# ─── Manutenção de estação ────────────────────────────────────────────────
+# Admin-only: é uma decisão operacional (a placa não escolhe se o carregador
+# tá disponível), e "tirar de circulação" é sensível o suficiente pra exigir
+# a mesma autenticação de KPI/faturamento.
+
+@app.post("/api/estacoes/<int:estacao_num>/manutencao")
+def api_entrar_manutencao(estacao_num: int):
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
+    if not (1 <= estacao_num <= cg.MAX_ESTACOES):
+        return jsonify({"erro": "Estação inexistente."}), 400
+    dados = request.get_json(force=True) or {}
+    motivo = (dados.get("motivo") or "").strip()
+    if not cg.entrar_em_manutencao(estacao_num, motivo):
+        return jsonify({"erro": "Estação com sessão ativa — encerre a recarga antes de marcar manutenção."}), 409
+    return jsonify({"ok": True})
+
+
+@app.post("/api/estacoes/<int:estacao_num>/manutencao/encerrar")
+def api_sair_manutencao(estacao_num: int):
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
+    cg.sair_de_manutencao(estacao_num)
+    return jsonify({"ok": True})
+
+
+# ─── Relatório do dia ─────────────────────────────────────────────────────
+# Admin-only pelo mesmo motivo do /api/kpis: faturamento e consumo agregado
+# são dado de negócio. Devolve texto pronto pra download (Content-Disposition
+# attachment) em vez de JSON — o front pede via fetch (pra mandar o header de
+# autorização) e transforma a resposta num arquivo, não navega direto pra cá.
+
+def _formatar_relatorio_txt(r: dict) -> str:
+    linhas = [
+        "=" * 50,
+        "   RELATÓRIO DIÁRIO — ChargeGrid Intelligence",
+        "=" * 50,
+        "",
+        f"Data:                      {r['data']}",
+        f"Gerado em:                 {r['gerado_em']}",
+        "",
+        f"Faturamento do dia:        R$ {r['faturamento']:.2f}",
+        f"Sessões iniciadas hoje:    {r['sessoes_dia']}",
+        f"Ticket médio:              R$ {r['ticket_medio']:.2f}",
+        f"Consumo de energia hoje:   {r['consumo_kwh']:.2f} kWh",
+        f"Estações ativas agora:     {r['estacoes_ativas_agora']}/{r['max_estacoes']}",
+        "=" * 50,
+        "",
+    ]
+    return "\n".join(linhas)
+
+
+@app.get("/api/relatorio")
+def api_relatorio():
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
+    relatorio = cg.relatorio_do_dia()
+    texto = _formatar_relatorio_txt(relatorio)
+    nome_arquivo = f"relatorio_chargegrid_{relatorio['data']}.txt"
+    return Response(
+        texto,
+        mimetype="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
 
 
 def _pin_valido(pin: str) -> bool:

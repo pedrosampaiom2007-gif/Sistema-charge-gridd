@@ -36,6 +36,10 @@
         <div class="value cyan" id="ro-potencia">-- / -- kW</div>
         <div class="bar-track"><div class="bar-fill" id="ro-potencia-bar"></div></div>
       </div>
+      <div class="readout">
+        <div class="label">Tarifa agora</div>
+        <div class="value" id="ro-tarifa">--</div>
+      </div>
     </div>
   </div>
 
@@ -60,7 +64,10 @@
 
   <div class="section-head">
     <h2>Estações de recarga</h2>
-    <button class="btn" id="btn-refresh">Atualizar agora</button>
+    <div class="row-botoes">
+      <button class="btn" id="btn-relatorio">Baixar relatório do dia</button>
+      <button class="btn" id="btn-refresh">Atualizar agora</button>
+    </div>
   </div>
   <div class="station-grid" id="station-grid"></div>
 
@@ -120,6 +127,23 @@
     <div class="row">
       <button class="btn" id="btn-cancel">Cancelar</button>
       <button class="btn" id="btn-confirm">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: colocar estação em manutenção -->
+<div class="overlay" id="overlay-manutencao">
+  <div class="modal">
+    <h3 id="manutencao-title">Colocar em manutenção</h3>
+    <p class="modal-hint">A estação para de aceitar novas recargas até você tirar ela da manutenção. Sessão em andamento não é afetada.</p>
+    <div class="field">
+      <label for="f-motivo-manutencao">Motivo (opcional)</label>
+      <input id="f-motivo-manutencao" placeholder="Ex: cabo danificado">
+    </div>
+    <div class="error-msg" id="manutencao-error"></div>
+    <div class="row">
+      <button class="btn" id="btn-cancelar-manutencao">Cancelar</button>
+      <button class="btn" id="btn-confirmar-manutencao">Confirmar</button>
     </div>
   </div>
 </div>

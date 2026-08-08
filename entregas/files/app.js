@@ -165,11 +165,26 @@ function iniciarLiveTick() {
   }, 1000);
 }
 
+// ─── Tarifa atual (mostrada na tela livre, antes do motorista decidir carregar) ─
+function atualizarTarifaNota(painel) {
+  const nota = document.getElementById("tarifa-nota");
+  if (!nota) return;
+  const preco = fmtMoeda(painel.tarifa_kwh_agora);
+  if (painel.tarifa_madrugada_ativa) {
+    nota.textContent = `Tarifa agora: ${preco}/kWh — desconto de madrugada até ${String(6).padStart(2, "0")}h`;
+    nota.classList.add("desconto");
+  } else {
+    nota.textContent = `Tarifa agora: ${preco}/kWh`;
+    nota.classList.remove("desconto");
+  }
+}
+
 // ─── Atualiza kWh/valor/potência lendo o painel (fonte real de verdade) ────────
 async function atualizarSessaoAoVivo() {
   try {
     const res = await fetch(`${API_BASE}/api/painel`);
     const painel = await res.json();
+    atualizarTarifaNota(painel);
     const e = painel.estacoes.find((x) => x.estacao === ESTACAO);
     if (!e) return;
 
@@ -178,6 +193,23 @@ async function atualizarSessaoAoVivo() {
       showToast("Sessão encerrada em outro terminal.");
       resetarParaLivre();
       return;
+    }
+
+    // Estação em manutenção: bloqueia o fluxo de recarga por completo — não
+    // adianta deixar a pessoa digitar a placa pra descobrir só no fim que
+    // não dava pra carregar aqui (a API recusaria com 409 de qualquer forma).
+    if (e.status === "Manutenção") {
+      if (telaAtual === "livre" || telaAtual === "identificacao") {
+        document.getElementById("manutencao-motivo-texto").textContent = e.motivo_manutencao
+          ? `Motivo: ${e.motivo_manutencao}. Procure outro totem, por favor.`
+          : "Esta estação está temporariamente indisponível. Procure outro totem, por favor.";
+        irPara("manutencao");
+      }
+      return;
+    }
+    if (telaAtual === "manutencao") {
+      // saiu da manutenção enquanto a tela esperava — libera o totem de novo
+      irPara("livre");
     }
 
     if (e.status === "Ocupada") {

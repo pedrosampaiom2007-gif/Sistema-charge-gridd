@@ -262,6 +262,19 @@ def inicializar_banco():
             )
         """)
 
+        # Estação em manutenção: a PRESENÇA da linha é o estado ("está em
+        # manutenção"), não uma coluna booleana — sem linha = estação normal.
+        # Persistido no banco (não em memória, como potencia_kw) porque um
+        # carregador com defeito continua com defeito depois da API reiniciar;
+        # perder esse estado no restart seria pior que não ter o recurso.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS manutencao_estacoes (
+                id_estacao INTEGER PRIMARY KEY,
+                motivo     TEXT,
+                desde      TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
         usuarios_teste = [
             ("ABC1D23", "Cliente Executivo A"),
             ("XYZ9F88", "Frota Corporativa B"),
@@ -484,6 +497,75 @@ def confirmar_pagamento(id_sessao_db: Optional[int]) -> None:
         )
 
 
+# ─── MÓDULO: MANUTENÇÃO DE ESTAÇÃO ─────────────────────────────────────────────
+# Terceiro estado além de Livre/Ocupada — pra tirar um carregador com defeito
+# de circulação sem apagar ele do sistema. Só o admin decide (rotas gated por
+# token em api_server.py); o motor só garante a regra de negócio: nunca entra
+# em manutenção por cima de uma sessão em andamento (quem já está carregando
+# termina normalmente).
+
+def estacao_em_manutencao(id_estacao: int) -> bool:
+    with conectar(somente_leitura=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM manutencao_estacoes WHERE id_estacao = %s", (id_estacao,))
+        return cursor.fetchone() is not None
+
+
+def estacoes_em_manutencao() -> dict:
+    with conectar(somente_leitura=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id_estacao, motivo, desde FROM manutencao_estacoes")
+        return {
+            id_estacao: {"motivo": motivo, "desde": desde.isoformat() if desde else None}
+            for id_estacao, motivo, desde in cursor.fetchall()
+        }
+
+
+def aplicar_manutencao(status_por_estacao: dict, em_manutencao: dict) -> dict:
+    """Sobrepõe 'Manutenção' num dict de status já calculado (Livre/Ocupada).
+    Recebe em_manutencao já buscado (não vai ao banco de novo) — quem chama
+    em sequência (como /api/painel) já precisa desse dict pra outra coisa
+    (o motivo da manutenção), então buscar aqui de novo dobraria a consulta
+    no endpoint mais chamado do sistema.
+
+    Nunca sobrepõe uma estação Ocupada: uma sessão em andamento não é
+    interrompida por uma manutenção marcada durante ela — a estação só entra
+    de fato em manutenção quando a sessão termina (entrar_em_manutencao já
+    recusa estação ativa; isso só afeta o raro caso de marcar bem no instante
+    entre o fim de uma sessão e o próximo poll, e nesse caso o pior efeito é
+    a manutenção aparecer um ciclo de poll depois, não perder dado)."""
+    return {
+        n: ("Manutenção" if n in em_manutencao and status != "Ocupada" else status)
+        for n, status in status_por_estacao.items()
+    }
+
+
+def entrar_em_manutencao(id_estacao: int, motivo: str = "") -> bool:
+    """False se a estação está com sessão ativa — precisa encerrar a recarga
+    em andamento antes; motorista no meio de uma sessão não pode ser
+    interrompido só porque o admin marcou o carregador como quebrado."""
+    if not (1 <= id_estacao <= MAX_ESTACOES):
+        return False
+    if estacoes[id_estacao - 1].ativa:
+        return False
+    with conectar() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO manutencao_estacoes (id_estacao, motivo)
+            VALUES (%s, %s)
+            ON CONFLICT (id_estacao) DO UPDATE SET motivo = EXCLUDED.motivo
+        """, (id_estacao, motivo.strip() or None))
+    return True
+
+
+def sair_de_manutencao(id_estacao: int) -> bool:
+    with conectar() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM manutencao_estacoes WHERE id_estacao = %s", (id_estacao,))
+        apagou = cursor.rowcount > 0
+    return apagou
+
+
 # ─── MÓDULO DE LEITURA — API interna para Lucas (chatbot) e Luan (dashboard) ──
 
 def listar_sessoes_ativas() -> list[dict]:
@@ -534,6 +616,42 @@ def contar_sessoes_dia(data: Optional[str] = None) -> int:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM sessoes WHERE data_sessao = %s", (data,))
         return cursor.fetchone()[0]
+
+
+def obter_consumo_dia(data: Optional[str] = None) -> float:
+    """kWh entregue no dia, somando TODAS as sessões da data (inclusive as
+    ainda em andamento) — diferente de obter_faturamento_dia, que só soma as
+    já PAGAS. Vem do banco, não do consumo_total_diario em memória: esse é
+    zerado a cada restart da API (mesma limitação do potencia_kw), então não
+    dava pra confiar nele pra um relatório."""
+    data = data or datetime.date.today().isoformat()
+    with conectar(somente_leitura=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(SUM(kwh_consumidos), 0) FROM sessoes WHERE data_sessao = %s",
+            (data,)
+        )
+        total = cursor.fetchone()[0]
+    return round(float(total), 2)
+
+
+def relatorio_do_dia(data: Optional[str] = None) -> dict:
+    """Resumo operacional do dia — usado pelo botão 'Baixar relatório' do
+    dashboard (ver api_server.py). Só números que já têm função de leitura
+    própria; esta função apenas agrupa, não calcula nada novo."""
+    data = data or datetime.date.today().isoformat()
+    faturamento = obter_faturamento_dia(data)
+    sessoes_dia = contar_sessoes_dia(data)
+    return {
+        "data": data,
+        "faturamento": faturamento,
+        "sessoes_dia": sessoes_dia,
+        "ticket_medio": round(faturamento / sessoes_dia, 2) if sessoes_dia else 0.0,
+        "consumo_kwh": obter_consumo_dia(data),
+        "estacoes_ativas_agora": contar_ativas(),
+        "max_estacoes": MAX_ESTACOES,
+        "gerado_em": datetime.datetime.now().isoformat(),
+    }
 
 
 def historico_usuario(placa: str) -> list[dict]:
@@ -598,7 +716,18 @@ def ia_prever_demanda(hora: int) -> float:
     return _DEMANDA_FALLBACK.get(hora, 0.5)
 
 
+HORA_INICIO_MADRUGADA = 0
+HORA_FIM_MADRUGADA    = 6      # intervalo [0h, 6h) — antes do movimento normal começar
+DESCONTO_MADRUGADA    = 0.20   # até 20% mais barato que a tarifa base
+
+
 def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
+    """Fator sobre TARIFA_BASE_KWH. Sobe em horário de pico e ocupação/demanda
+    alta (já existia); desde a revisão de madrugada, também desce nas horas de
+    menor movimento (0h-5h) — um desconto, não só um teto pra sobretaxa. É a
+    diferença entre só cobrar mais caro no pico e efetivamente incentivar o
+    motorista a carregar fora dele, que é o motivo de existir tarifa dinâmica
+    numa rede elétrica: achatar a curva de demanda, não só faturar mais."""
     fator = 1.0
     if hora == 12 or 18 <= hora <= 20:
         fator += 0.30
@@ -609,6 +738,12 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
         fator += 0.20
     elif demanda >= 0.75:
         fator += 0.10
+    if HORA_INICIO_MADRUGADA <= hora < HORA_FIM_MADRUGADA:
+        # max(0.80, ...) e não só "fator - desconto": impede que o desconto
+        # deixe o fator abaixo de 80% mesmo no caso (raro de madrugada, mas
+        # possível se o modelo de IA prever demanda alta) de outro fator ter
+        # empurrado o valor pra cima antes — o desconto nunca vira prejuízo.
+        fator = max(0.80, fator - DESCONTO_MADRUGADA)
     return round(fator, 2)
 
 
@@ -677,6 +812,8 @@ def iniciar_sessao() -> None:
         print("[ERRO] Estação inexistente."); return
     if estacoes[idx].ativa:
         print("[ERRO] Estação ocupada."); return
+    if estacao_em_manutencao(idx + 1):
+        print("[ERRO] Estação em manutenção."); return
 
     print("ID do usuário (placa cadastrada, ex: ABC1D23): ", end="")
     uid = input().strip().upper() or "ANONIMO"

@@ -15,6 +15,7 @@ document.getElementById("api-base-label").textContent = API_BASE;
 
 // ─── Estado local ─────────────────────────────────────────────────────────────
 let estacaoSelecionada = null;
+let estacaoParaManutencao = null;
 let pollTimer = null;
 
 // ─── Autenticação de administrador ─────────────────────────────────────────────
@@ -133,18 +134,48 @@ function gaugeSVG(kw, ativa) {
 }
 
 // ─── Render: estações ──────────────────────────────────────────────────────────
+// status pode ser "Ocupada", "Livre" ou "Manutenção" (terceiro estado — tira
+// o carregador de circulação sem apagar ele do sistema, ex: cabo com defeito).
+function classeDoStatus(status) {
+  if (status === "Ocupada") return "ocupada";
+  if (status === "Manutenção") return "manutencao";
+  return "livre";
+}
+
 function renderEstacoes(estacoes) {
   const grid = document.getElementById("station-grid");
   grid.innerHTML = "";
 
   estacoes.forEach((e) => {
     const ativa = e.status === "Ocupada";
+    const emManutencao = e.status === "Manutenção";
+    const classe = classeDoStatus(e.status);
+
+    // O botão principal muda de ação conforme o estado; "colocar em
+    // manutenção" só faz sentido pra estação Livre — não dá pra marcar uma
+    // Ocupada (a API recusa, ver aplicar_manutencao no motor) nem faz
+    // sentido oferecer de novo numa que já está em manutenção.
+    let botaoPrincipal;
+    if (ativa) {
+      botaoPrincipal = `<button class="btn small danger" data-estacao="${e.estacao}" data-acao="encerrar">Encerrar sessão</button>`;
+    } else if (emManutencao) {
+      botaoPrincipal = `<button class="btn small" data-estacao="${e.estacao}" data-acao="sair-manutencao">Sair da manutenção</button>`;
+    } else {
+      botaoPrincipal = `<button class="btn small" data-estacao="${e.estacao}" data-acao="iniciar">Iniciar sessão</button>`;
+    }
+    const linkManutencao = (!ativa && !emManutencao)
+      ? `<button class="link-manutencao" data-estacao="${e.estacao}" data-acao="entrar-manutencao">Colocar em manutenção</button>`
+      : "";
+    const motivo = (emManutencao && e.motivo_manutencao)
+      ? `<div class="motivo-manutencao">Motivo: ${e.motivo_manutencao}</div>`
+      : "";
+
     const card = document.createElement("div");
-    card.className = `station ${ativa ? "ocupada" : "livre"}`;
+    card.className = `station ${classe}`;
     card.innerHTML = `
       <div class="head">
         <span class="id">EST-${String(e.estacao).padStart(2, "0")}</span>
-        <span class="pill ${ativa ? "ocupada" : "livre"}">${ativa ? "Ocupada" : "Livre"}</span>
+        <span class="pill ${classe}">${e.status}</span>
       </div>
       <div class="gauge-wrap">${gaugeSVG(e.potencia_kw, ativa)}</div>
       <div class="usuario">${ativa ? e.usuario : "—"}</div>
@@ -154,11 +185,9 @@ function renderEstacoes(estacoes) {
         <div><div class="k">Início</div><div class="v">${ativa ? e.hora_inicio + "h" : "--"}</div></div>
         <div><div class="k">Pagto</div><div class="v">${e.metodo_pagamento}</div></div>
       </div>
-      <div class="actions">
-        <button class="btn small ${ativa ? "danger" : ""}" data-estacao="${e.estacao}" data-ativa="${ativa}">
-          ${ativa ? "Encerrar sessão" : "Iniciar sessão"}
-        </button>
-      </div>
+      ${motivo}
+      <div class="actions">${botaoPrincipal}</div>
+      ${linkManutencao}
     `;
     grid.appendChild(card);
   });
@@ -166,8 +195,11 @@ function renderEstacoes(estacoes) {
   grid.querySelectorAll("button[data-estacao]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const num = Number(btn.dataset.estacao);
-      const ativa = btn.dataset.ativa === "true";
-      ativa ? encerrarSessao(num) : abrirModal(num);
+      const acao = btn.dataset.acao;
+      if (acao === "encerrar") encerrarSessao(num);
+      else if (acao === "iniciar") abrirModal(num);
+      else if (acao === "entrar-manutencao") abrirModalManutencao(num);
+      else if (acao === "sair-manutencao") sairDaManutencao(num);
     });
   });
 }
@@ -260,6 +292,13 @@ async function refresh() {
     document.getElementById("kpi-consumo").innerHTML =
       `${kpis.consumo_total_diario_kwh.toFixed(1)}<span class="unit">kWh</span>`;
 
+    const roTarifa = document.getElementById("ro-tarifa");
+    roTarifa.textContent = `${fmtMoeda(painel.tarifa_kwh_agora)}/kWh`;
+    roTarifa.className = `value ${painel.tarifa_madrugada_ativa ? "cyan" : "amber"}`;
+    roTarifa.title = painel.tarifa_madrugada_ativa
+      ? "Desconto de madrugada ativo (0h-6h)"
+      : "";
+
     renderEstacoes(painel.estacoes);
 
     const curvaRes = await fetch(`${API_BASE}/api/demanda-ia`, { headers: authHeaders });
@@ -324,6 +363,82 @@ async function encerrarSessao(numEstacao) {
   }
 }
 
+// ─── Modal: colocar estação em manutenção ───────────────────────────────────
+function abrirModalManutencao(numEstacao) {
+  estacaoParaManutencao = numEstacao;
+  document.getElementById("manutencao-title").textContent = `Colocar em manutenção — Estação ${numEstacao}`;
+  document.getElementById("f-motivo-manutencao").value = "";
+  document.getElementById("manutencao-error").textContent = "";
+  document.getElementById("overlay-manutencao").classList.add("open");
+  document.getElementById("f-motivo-manutencao").focus();
+}
+
+function fecharModalManutencao() {
+  document.getElementById("overlay-manutencao").classList.remove("open");
+  estacaoParaManutencao = null;
+}
+
+async function confirmarManutencao() {
+  const motivo = document.getElementById("f-motivo-manutencao").value.trim();
+  const errEl = document.getElementById("manutencao-error");
+  errEl.textContent = "";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/estacoes/${estacaoParaManutencao}/manutencao`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.erro || "Não foi possível colocar em manutenção."; return; }
+    showToast(`Estação ${estacaoParaManutencao} em manutenção.`);
+    fecharModalManutencao();
+    refresh();
+  } catch (err) {
+    errEl.textContent = "Erro de conexão com a API.";
+  }
+}
+
+async function sairDaManutencao(numEstacao) {
+  try {
+    const res = await fetch(`${API_BASE}/api/estacoes/${numEstacao}/manutencao/encerrar`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${adminToken}` },
+    });
+    if (!res.ok) { showToast("Erro ao tirar da manutenção."); return; }
+    showToast(`Estação ${numEstacao} de volta ao normal.`);
+    refresh();
+  } catch (err) {
+    showToast("Erro de conexão com a API.");
+  }
+}
+
+// ─── Relatório do dia ────────────────────────────────────────────────────────
+// Baixa via fetch (não um <a href> direto) porque precisa mandar o header de
+// autorização — a rota é admin-only, igual /api/kpis.
+async function baixarRelatorio() {
+  try {
+    const res = await fetch(`${API_BASE}/api/relatorio`, {
+      headers: { "Authorization": `Bearer ${adminToken}` },
+    });
+    if (!res.ok) { showToast("Não foi possível gerar o relatório."); return; }
+
+    const disposicao = res.headers.get("Content-Disposition") || "";
+    const nomeMatch = disposicao.match(/filename="?([^"]+)"?/);
+    const nomeArquivo = nomeMatch ? nomeMatch[1] : "relatorio_chargegrid.txt";
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = nomeArquivo;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast("Erro de conexão com a API.");
+  }
+}
+
 // ─── Listeners globais ──────────────────────────────────────────────────────────
 document.getElementById("btn-refresh").addEventListener("click", refresh);
 document.getElementById("btn-cancel").addEventListener("click", fecharModal);
@@ -337,6 +452,15 @@ document.addEventListener("keydown", (e) => {
 document.getElementById("btn-login").addEventListener("click", fazerLogin);
 document.getElementById("f-admin-senha").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
+});
+document.getElementById("btn-relatorio").addEventListener("click", baixarRelatorio);
+document.getElementById("btn-cancelar-manutencao").addEventListener("click", fecharModalManutencao);
+document.getElementById("btn-confirmar-manutencao").addEventListener("click", confirmarManutencao);
+document.getElementById("overlay-manutencao").addEventListener("click", (e) => {
+  if (e.target.id === "overlay-manutencao") fecharModalManutencao();
+});
+document.getElementById("f-motivo-manutencao").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarManutencao();
 });
 
 // ─── Início ──────────────────────────────────────────────────────────────────────
