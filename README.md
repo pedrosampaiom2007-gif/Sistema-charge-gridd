@@ -21,6 +21,7 @@ O motor (`entregas/ev_chargegrid.py`) controla até 10 estações de recarga: au
 | Documento | Conteúdo |
 |---|---|
 | ⚙️ [`docs/INSTALL.md`](docs/INSTALL.md) | Configuração do `.env` e passo a passo completo pra rodar e testar o projeto do zero |
+| 📖 [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | Como usar o totem, o app do motorista e o dashboard |
 | 🏗️ [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Diagrama de arquitetura, estrutura do repositório e fluxo principal |
 | 🔒 [`docs/SECURITY.md`](docs/SECURITY.md) | Revisão de segurança (rate limiting, CORS, IDOR, etc.) e limitações conhecidas |
 | 📝 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | O que já foi resolvido, auditoria completa dos módulos e novidades recentes |
