@@ -1,7 +1,7 @@
 # ChargeGrid Intelligence
 
 <p align="center">
-<img src="./assets/goodwe.png" width="95%">
+<img src="./docs/goodwe.png" width="95%">
 </p>
 
 Sistema de gestão comercial de recarga de veículos elétricos, desenvolvido para o EV Challenge 2026 (GoodWe / FIAP). Cobre o ciclo completo de uma sessão de recarga comercial: autoatendimento no totem, cobrança via Pix simulado, painel operacional para o gestor (com login), uma área pessoal do motorista (histórico de pagamentos, suporte a mais de um carro por conta) e um assistente conversacional que responde tanto sobre o sistema quanto dúvidas gerais de carro elétrico.
