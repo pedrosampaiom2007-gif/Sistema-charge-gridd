@@ -42,6 +42,21 @@ Depois é só abrir `entregas/index.html` no navegador. Passo a passo completo, 
 
 <br>
 
-## Equipe
+## 👥 Equipe
 
-Pedro Sampaio, Raul Sampaio, Lucas Garcia, Luan de Araujo, Kevin Rodrigues, Pedro Ribeiro Lopes — EV Challenge 2026, GoodWe / FIAP.
+| Integrante           | RM     |
+|----------------------|--------|
+| Pedro Sampaio | xxxxxx |
+| Raul Sampaio | xxxxxx |
+| Lucas Garcia | xxxxxx |
+| Luan de Araujo | xxxxxx |
+| Kevin Rodrigues | xxxxxx |
+| Pedro Ribeiro Lopes | 570083 |
+
+<br>
+
+<div align="center">
+
+Desenvolvido para o EV Challenge 2026, GoodWe / FIAP.
+
+</div>
