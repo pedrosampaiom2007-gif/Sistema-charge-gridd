@@ -23,12 +23,14 @@ Como isso vira desconto na tarifa:
 import os
 import json
 import datetime
+import time
 import urllib.request
 
 LATITUDE = float(os.environ.get("SOLAR_LATITUDE", "-23.5505"))    # São Paulo, ajustável por ambiente
 LONGITUDE = float(os.environ.get("SOLAR_LONGITUDE", "-46.6333"))
 TAMANHO_JANELA_SOLAR = 4     # nº de horas de maior geração prevista usadas como "janela"
 TIMEOUT_SEGUNDOS = 4
+INTERVALO_RETENTATIVA_SEGUNDOS = 300  # 5 min — de quanto em quanto tempo tenta a Open-Meteo de novo depois de uma falha
 
 # Perfil sintético (formato de sino, pico ao meio-dia) — usado só se a
 # Open-Meteo não responder a tempo. Mesma filosofia do dicionário de
@@ -40,12 +42,18 @@ _CURVA_FALLBACK = {
     18: 0.18, 19: 0.05, 20: 0.00, 21: 0.00, 22: 0.00, 23: 0.00,
 }
 
-# Cache por processo, uma consulta por dia — a previsão de manhã cedo não
-# muda hora a hora o suficiente pra justificar bater na API pública a cada
-# request (o /api/painel é consultado a cada 3-4s pelo totem e dashboard).
+# Cache por processo, uma consulta por dia se a Open-Meteo respondeu — a
+# previsão de manhã cedo não muda hora a hora o suficiente pra justificar
+# bater na API pública a cada request (o /api/painel é consultado a cada
+# 3-4s pelo totem e dashboard). Se a chamada FALHOU, o cache do fallback só
+# vale por INTERVALO_RETENTATIVA_SEGUNDOS, não o dia inteiro — sem isso, uma
+# única falha de rede (ex: timeout no "cold start" de um plano gratuito
+# hibernado) prendia o sistema no perfil sintético até virar a data, mesmo
+# que a Open-Meteo voltasse a responder minutos depois.
 _cache_data = None
 _cache_curva = None
 _cache_fonte = None
+_proxima_tentativa = 0.0  # time.monotonic(); só reconsultada depois desse instante
 
 
 def _buscar_curva_open_meteo() -> dict:
@@ -73,10 +81,12 @@ def _buscar_curva_open_meteo() -> dict:
 
 def curva_solar_hoje() -> dict:
     """{hora (0-23): fração 0.0-1.0} de geração prevista pra hoje."""
-    global _cache_data, _cache_curva, _cache_fonte
+    global _cache_data, _cache_curva, _cache_fonte, _proxima_tentativa
     hoje = datetime.date.today().isoformat()
+    agora = time.monotonic()
 
-    if _cache_data == hoje and _cache_curva is not None:
+    cache_valido = _cache_data == hoje and _cache_curva is not None
+    if cache_valido and (_cache_fonte == "open-meteo" or agora < _proxima_tentativa):
         return _cache_curva
 
     try:
@@ -85,6 +95,7 @@ def curva_solar_hoje() -> dict:
     except Exception:
         curva = dict(_CURVA_FALLBACK)
         fonte = "fallback"
+        _proxima_tentativa = agora + INTERVALO_RETENTATIVA_SEGUNDOS
 
     _cache_data, _cache_curva, _cache_fonte = hoje, curva, fonte
     return curva

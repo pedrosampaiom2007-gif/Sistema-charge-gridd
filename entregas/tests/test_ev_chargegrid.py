@@ -161,11 +161,13 @@ class TestSolarOptimizer(unittest.TestCase):
         self.solar._cache_data = None
         self.solar._cache_curva = None
         self.solar._cache_fonte = None
+        self.solar._proxima_tentativa = 0.0
 
     def tearDown(self):
         self.solar._cache_data = None
         self.solar._cache_curva = None
         self.solar._cache_fonte = None
+        self.solar._proxima_tentativa = 0.0
 
     def test_cai_no_fallback_se_a_api_falhar(self):
         with patch.object(self.solar, "_buscar_curva_open_meteo", side_effect=TimeoutError):
@@ -187,6 +189,37 @@ class TestSolarOptimizer(unittest.TestCase):
             self.solar.curva_solar_hoje()
             self.solar.janela_solar_hoje()
         self.assertEqual(mock_busca.call_count, 1)
+
+    def test_fallback_nao_trava_o_dia_todo_tenta_de_novo_apos_o_intervalo(self):
+        """Regressão: antes, uma falha (ex: timeout no cold start de um
+        deploy hibernado) prendia o sistema no perfil sintético até virar a
+        data, mesmo que a rede voltasse a funcionar minutos depois — porque
+        o cache só olhava a data, não se a última tentativa deu certo."""
+        with patch.object(self.solar, "_buscar_curva_open_meteo", side_effect=TimeoutError) as mock_busca:
+            self.solar.curva_solar_hoje()
+            self.solar.curva_solar_hoje()  # ainda dentro do intervalo — não tenta de novo
+        self.assertEqual(mock_busca.call_count, 1)
+
+        # simula o intervalo de retentativa já ter passado
+        self.solar._proxima_tentativa = 0.0
+        with patch.object(self.solar, "_buscar_curva_open_meteo", return_value={h: 0.5 for h in range(24)}) as mock_busca:
+            curva = self.solar.curva_solar_hoje()
+        self.assertEqual(mock_busca.call_count, 1)
+        self.assertEqual(self.solar.fonte_da_previsao(), "open-meteo")
+        self.assertEqual(curva[0], 0.5)
+
+    def test_sucesso_nao_reconsulta_pelo_resto_do_dia(self):
+        """Diferente do fallback: um sucesso vale o dia inteiro — a previsão
+        de manhã cedo não muda o suficiente hora a hora pra justificar bater
+        na API de novo antes de virar a data."""
+        with patch.object(self.solar, "_buscar_curva_open_meteo", return_value=dict(self.solar._CURVA_FALLBACK)) as mock_busca:
+            self.solar.curva_solar_hoje()
+        # mesmo "avançando" o relógio de retentativa manualmente, sucesso
+        # não deveria nem olhar pra _proxima_tentativa
+        self.solar._proxima_tentativa = 0.0
+        with patch.object(self.solar, "_buscar_curva_open_meteo", return_value=dict(self.solar._CURVA_FALLBACK)) as mock_busca_2:
+            self.solar.curva_solar_hoje()
+        self.assertEqual(mock_busca_2.call_count, 0)
 
     def test_janela_solar_pega_as_horas_de_maior_geracao(self):
         curva_falsa = {h: 0.0 for h in range(24)}
