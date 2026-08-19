@@ -115,20 +115,21 @@ de segurança seguindo boas práticas de LGPD."
 
 ## 1:50 – 2:25 | Pilar 3 — Recarga inteligente + interface do usuário (35s)
 
-**FALA:** "O terceiro pilar é a experiência de quem usa — e é aqui que mora
-um dos nossos maiores diferenciais. (MOSTRAR: totem, app do motorista e o
-chatbot respondendo uma pergunta) Temos três interfaces conectadas ao mesmo
-motor: totem, app do motorista e dashboard de gestão. E o assistente não é
-um bot de resposta pronta — é uma inteligência artificial de verdade, que
-entende a pergunta, sabe o que está acontecendo no sistema agora, e ainda
-tira dúvida geral sobre carro elétrico."
+**FALA:** "O terceiro pilar é a experiência de quem usa. (MOSTRAR: totem,
+app do motorista e o chatbot respondendo uma pergunta) Temos três
+interfaces conectadas ao mesmo motor: totem, app do motorista e dashboard
+de gestão. E o assistente não é um bot de resposta pronta — é uma
+inteligência artificial de verdade, que entende a pergunta, sabe o que está
+acontecendo no sistema agora, e ainda tira dúvida geral sobre carro
+elétrico."
 
-**Terceira revisão**: essa parte ganhou peso — o time decidiu que o
-chatbot é o maior diferencial do sistema, junto com o caminho de hardware
-físico que vem no fechamento, então a fala deixou de tratar o assistente
-como "mais uma tela" e passou a nomear ele como diferencial de propósito.
-Atenção no checklist: a pergunta que aparecer no vídeo precisa ser uma que
-o chat responde bem, ver abaixo.
+**Quarta revisão**: tirado "é aqui que mora um dos nossos maiores
+diferenciais" — quem é diferente não precisa dizer que é diferente, só
+mostrar funcionando. O chatbot continua sendo o ponto mais forte do vídeo,
+só que agora prova isso pela demonstração (MOSTRAR) e pela descrição do
+que ele faz de verdade, não por um rótulo colado na frase. Atenção no
+checklist: a pergunta que aparecer no vídeo precisa ser uma que o chat
+responde bem, ver abaixo.
 
 ## 2:25 – 2:45 | Diferencial e maturidade do projeto (20s)
 
@@ -136,24 +137,34 @@ o chat responde bem, ver abaixo.
 banco de dados em nuvem, API funcionando, 53 testes automatizados, deploy
 testado — e já passou por uma auditoria de segurança de verdade, incluindo
 uma falha real de autorização que a gente encontrou e corrigiu antes de
-qualquer banca ver. Esse é o nosso principal diferencial — não é uma
-ideia, é um sistema rodando de ponta a ponta, testado e seguro, pronto pra
-evoluir."
+qualquer banca ver."
 
-**Terceira revisão**: tirado o `(MOSTRAR: código/terminal/deploy)` — a
-banca não quer ver código ou terminal, quer ver o sistema funcionando. O
-número (53 testes, deploy testado) já prova maturidade só de ser
-**falado** com confiança; não precisa de tela de código pra sustentar.
-Continue mostrando o sistema de verdade (a tela que já estava aberta do
-Pilar 3) em vez de cortar pra outra coisa aqui.
+**Terceira e quarta revisão**: tirado o `(MOSTRAR: código/terminal/deploy)`
+— a banca não quer ver código ou terminal, quer ver o sistema funcionando;
+continue na tela do Pilar 3 em vez de cortar pra outra coisa. Também tirado
+"esse é o nosso principal diferencial — não é uma ideia..." no final da
+fala: são os próprios números (53 testes, deploy testado, falha real
+corrigida) que provam maturidade — dizer "somos diferentes" depois de já
+ter mostrado os fatos só repete o que os fatos já disseram sozinhos, e
+gasta tempo à toa.
 
 ## 2:45 – 3:00 | Próximos passos + fechamento (15s)
 
 **FALA:** "Já temos a tarifa reagindo à previsão de sol e o balanceamento
 de carga falando o padrão aberto OCPP — alinhados com o próprio DNA da
-GoodWe. Os próximos passos: um cliente OCPP real conversando com hardware
-de verdade, e o sensor físico de ocupação de vaga. ChargeGrid Intelligence:
-gestão de recarga pronta pra escalar. Obrigado."
+GoodWe. E o próximo passo já está em andamento: um cliente OCPP real
+conversando com hardware físico de verdade, com o sensor de ocupação que
+a nossa própria equipe está montando agora. É isso que vai levar o
+ChargeGrid ainda mais longe. ChargeGrid Intelligence: gestão de recarga
+pronta pra escalar. Obrigado."
+
+**Quarta revisão**: o fechamento ficou mais claro sobre o hardware físico
+ser o que empurra o projeto além do que já está pronto — "está em
+andamento" e "a nossa própria equipe está montando agora" deixam explícito
+que não é só uma ideia na lista, é trabalho real acontecendo em paralelo
+(o Raul e o Luan). É aqui, não no meio do vídeo, que faz sentido apontar
+pra frente — o resto do roteiro mostra o que já está pronto, o fechamento
+mostra pra onde vai.
 
 **Histórico**: a primeira versão do roteiro dizia "queremos conectar à
 energia solar" como desejo — trocamos porque já implementamos. A segunda
