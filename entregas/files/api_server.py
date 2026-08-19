@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ev_chargegrid as cg
 import chatbot
+import solar_optimizer as solar
 
 app = Flask(__name__)
 
@@ -129,6 +130,14 @@ _INICIO_REAL = {}
 # produção usaria algo com expiração e persistência.
 _TOKENS_ADMIN_VALIDOS = set()
 
+# Leitura do sensor físico de ocupação de vaga (ESP32 + HC-SR04, ver
+# docs/TAREFAS_EQUIPE.md) — None enquanto nenhum hardware nunca reportou pra
+# aquela estação. Em memória, mesma natureza de potencia_kw: é estado ao
+# vivo do sensor, não histórico; se a API reiniciar, o próximo pacote do
+# firmware (mandado a cada poucos segundos) resolve sozinho.
+_OCUPACAO_FISICA = {}
+TELEMETRIA_TOKEN = os.environ.get("TELEMETRIA_TOKEN", "")
+
 
 # ─── Helpers de serialização ──────────────────────────────────────────────────
 
@@ -189,6 +198,9 @@ def painel():
             "hora_inicio": cg.estacoes[n - 1].hora_inicio if ativa else 0,
             "iniciado_em_real": _INICIO_REAL.get(n) if ativa else None,
             "motivo_manutencao": em_manutencao.get(n, {}).get("motivo") if status_por_estacao[n] == "Manutenção" else None,
+            # None = nenhum sensor físico reportou ainda pra essa estação
+            # (é o caso de hoje, sem hardware conectado — ver TAREFAS_EQUIPE.md)
+            "ocupacao_fisica": _OCUPACAO_FISICA.get(n),
         })
 
     # Sem receita_total nem consumo_total_diario_kwh aqui: esta rota é aberta
@@ -210,7 +222,23 @@ def painel():
         "fator_tarifa_agora": fator_tarifa,
         "tarifa_kwh_agora": round(cg.TARIFA_BASE_KWH * fator_tarifa, 2),
         "tarifa_madrugada_ativa": cg.HORA_INICIO_MADRUGADA <= hora_atual < cg.HORA_FIM_MADRUGADA,
+        "tarifa_solar_ativa": solar.esta_em_janela_solar(hora_atual),
         "atualizado_em": datetime.datetime.now().isoformat(),
+    })
+
+
+@app.get("/api/solar")
+def api_solar():
+    """Curva de geração solar prevista pra hoje (Open-Meteo, sem chave) e
+    quais horas formam a janela de incentivo — aberta, como o /api/painel:
+    não é dado de negócio, é a mesma previsão que justifica o preço público
+    que o totem mostra. Usada pelo gráfico do dashboard."""
+    return jsonify({
+        "curva": solar.curva_solar_para_api(),
+        "fonte": solar.fonte_da_previsao(),
+        "desconto_solar": cg.DESCONTO_SOLAR,
+        "latitude": solar.LATITUDE,
+        "longitude": solar.LONGITUDE,
     })
 
 
@@ -337,6 +365,32 @@ def api_avancar_tempo():
         return jsonify({"erro": "Login de administrador necessário."}), 401
     cg.simular_tempo()
     return jsonify({"ok": True, "painel": painel().json})
+
+
+# ─── Telemetria de hardware (sensor físico de ocupação de vaga) ──────────────
+# Contrato pronto pra quando o ESP32 existir de verdade (ver
+# docs/TAREFAS_EQUIPE.md) — o hardware manda {"ocupada": true/false} a cada
+# poucos segundos, e o valor aparece em /api/painel como "ocupacao_fisica"
+# de cada estação, junto do que o software já sabe (sessão ativa ou não).
+# É informativo por enquanto — não decide nada sozinho (não fecha sessão,
+# não cobra idle fee); cruzar as duas fontes fica pro dashboard mostrar.
+@app.post("/api/estacoes/<int:estacao_num>/telemetria")
+@limiter.limit("60 per minute")
+def api_telemetria_estacao(estacao_num: int):
+    """TELEMETRIA_TOKEN é opcional: sem ela configurada no ambiente, a rota
+    aceita qualquer chamada — aceitável pra desenvolvimento e demonstração
+    com um ESP32 na mesma rede, mas configure a variável (e mande o mesmo
+    valor no header X-Telemetria-Token do firmware) antes de expor isso
+    numa API pública de verdade, senão qualquer um forja ocupação."""
+    if TELEMETRIA_TOKEN and request.headers.get("X-Telemetria-Token") != TELEMETRIA_TOKEN:
+        return jsonify({"erro": "Token de telemetria inválido."}), 403
+    if not (1 <= estacao_num <= cg.MAX_ESTACOES):
+        return jsonify({"erro": "Estação inexistente."}), 400
+    dados = request.get_json(force=True) or {}
+    if "ocupada" not in dados:
+        return jsonify({"erro": "Informe 'ocupada' (true ou false)."}), 400
+    _OCUPACAO_FISICA[estacao_num] = bool(dados["ocupada"])
+    return jsonify({"ok": True})
 
 
 # ─── Manutenção de estação ────────────────────────────────────────────────

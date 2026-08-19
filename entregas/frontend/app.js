@@ -254,6 +254,60 @@ function renderDemandChart(curva, horaAtual) {
   `;
 }
 
+// ─── Render: gráfico de geração solar prevista ──────────────────────────────────
+// Mesmo layout do gráfico de demanda, mas com cor invertida (ciano pra curva,
+// âmbar pro marcador de "agora") pra ficar visualmente distinto sem inventar
+// uma terceira paleta — e uma faixa sombreada marcando a janela de desconto
+// solar, que muda de hora conforme a previsão do dia (não é um horário fixo).
+function renderSolarChart(curva, horaAtual, fonte) {
+  const svg = document.getElementById("solar-chart");
+  const W = 720, H = 180, padL = 30, padB = 22, padT = 12, padR = 10;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const passo = plotW / (curva.length - 1);
+
+  const pts = curva.map((c, i) => [padL + i * passo, padT + (1 - c.geracao_relativa) * plotH]);
+  const path = pts.map((p, i) => (i === 0 ? `M ${p[0]} ${p[1]}` : `L ${p[0]} ${p[1]}`)).join(" ");
+  const areaPath = `${path} L ${pts[pts.length - 1][0]} ${padT + plotH} L ${pts[0][0]} ${padT + plotH} Z`;
+
+  let gridLines = "";
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (g / 4) * plotH;
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+  }
+
+  let hourLabels = "";
+  [0, 6, 12, 18, 23].forEach((h) => {
+    const x = padL + h * passo;
+    hourLabels += `<text x="${x}" y="${H - 4}" fill="var(--muted-dim)" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="middle">${h}h</text>`;
+  });
+
+  // Faixa da janela solar: pode ser descontínua (nuvem passageira desloca a
+  // previsão), então desenha um retângulo por hora marcada em vez de assumir
+  // um intervalo contínuo.
+  let faixaJanela = "";
+  curva.forEach((c, i) => {
+    if (c.janela_solar) {
+      faixaJanela += `<rect x="${padL + i * passo - passo / 2}" y="${padT}" width="${passo}" height="${plotH}" fill="var(--cyan)" opacity="0.07"/>`;
+    }
+  });
+
+  const nowX = padL + horaAtual * passo;
+  const geracaoAgora = curva[horaAtual] ? curva[horaAtual].geracao_relativa : 0;
+
+  svg.innerHTML = `
+    ${gridLines}
+    ${faixaJanela}
+    <path d="${areaPath}" fill="var(--cyan)" opacity="0.10"/>
+    <path d="${path}" fill="none" stroke="var(--cyan)" stroke-width="2"/>
+    <line x1="${nowX}" y1="${padT}" x2="${nowX}" y2="${padT + plotH}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="3 3"/>
+    <circle cx="${nowX}" cy="${padT + (1 - geracaoAgora) * plotH}" r="4" fill="var(--amber)"/>
+    ${hourLabels}
+  `;
+
+  document.getElementById("solar-fonte").textContent =
+    fonte === "open-meteo" ? "previsão real (Open-Meteo)" : "perfil padrão (previsão indisponível)";
+}
+
 // ─── Fetch + refresh geral ──────────────────────────────────────────────────────
 async function refresh() {
   try {
@@ -294,16 +348,25 @@ async function refresh() {
 
     const roTarifa = document.getElementById("ro-tarifa");
     roTarifa.textContent = `${fmtMoeda(painel.tarifa_kwh_agora)}/kWh`;
-    roTarifa.className = `value ${painel.tarifa_madrugada_ativa ? "cyan" : "amber"}`;
+    const temDesconto = painel.tarifa_madrugada_ativa || painel.tarifa_solar_ativa;
+    roTarifa.className = `value ${temDesconto ? "cyan" : "amber"}`;
     roTarifa.title = painel.tarifa_madrugada_ativa
       ? "Desconto de madrugada ativo (0h-6h)"
+      : painel.tarifa_solar_ativa
+      ? "Desconto da janela solar ativo — horário de maior geração fotovoltaica prevista"
       : "";
 
     renderEstacoes(painel.estacoes);
 
-    const curvaRes = await fetch(`${API_BASE}/api/demanda-ia`, { headers: authHeaders });
+    const [curvaRes, solarRes] = await Promise.all([
+      fetch(`${API_BASE}/api/demanda-ia`, { headers: authHeaders }),
+      fetch(`${API_BASE}/api/solar`),
+    ]);
     const curva = await curvaRes.json();
     renderDemandChart(curva, painel.hora_atual);
+
+    const solarDados = await solarRes.json();
+    renderSolarChart(solarDados.curva, painel.hora_atual, solarDados.fonte);
   } catch (err) {
     showToast("Não foi possível falar com a API. Ela está rodando em " + API_BASE + "?");
     console.error(err);

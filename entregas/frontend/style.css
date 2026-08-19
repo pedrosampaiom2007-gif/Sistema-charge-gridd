@@ -333,6 +333,20 @@ a { color: var(--cyan); }
   margin-bottom: 8px;
 }
 
+.section-caption {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 28px;
+}
+
+.solar-fonte-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-dim);
+}
+
 /* ─── Modal ────────────────────────────────────────────────────────────── */
 
 .overlay {

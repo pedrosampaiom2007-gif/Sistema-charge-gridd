@@ -166,12 +166,18 @@ function iniciarLiveTick() {
 }
 
 // ─── Tarifa atual (mostrada na tela livre, antes do motorista decidir carregar) ─
+// Madrugada e janela solar nunca ficam ativas ao mesmo tempo (o motor garante
+// isso — geração solar é zero de madrugada), então não precisa decidir qual
+// mostrar quando os dois vierem juntos.
 function atualizarTarifaNota(painel) {
   const nota = document.getElementById("tarifa-nota");
   if (!nota) return;
   const preco = fmtMoeda(painel.tarifa_kwh_agora);
   if (painel.tarifa_madrugada_ativa) {
     nota.textContent = `Tarifa agora: ${preco}/kWh — desconto de madrugada até ${String(6).padStart(2, "0")}h`;
+    nota.classList.add("desconto");
+  } else if (painel.tarifa_solar_ativa) {
+    nota.textContent = `Tarifa agora: ${preco}/kWh — ☀ desconto de janela solar`;
     nota.classList.add("desconto");
   } else {
     nota.textContent = `Tarifa agora: ${preco}/kWh`;

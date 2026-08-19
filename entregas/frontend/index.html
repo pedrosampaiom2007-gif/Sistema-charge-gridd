@@ -78,6 +78,15 @@
     <svg id="demand-chart" viewBox="0 0 720 180" width="100%" height="180" role="img" aria-label="Curva de demanda prevista por hora"></svg>
   </div>
 
+  <div class="section-head">
+    <h2>Geração solar prevista — 24h</h2>
+    <span class="solar-fonte-tag" id="solar-fonte">--</span>
+  </div>
+  <div class="chart-panel">
+    <svg id="solar-chart" viewBox="0 0 720 180" width="100%" height="180" role="img" aria-label="Geração solar relativa prevista por hora, com a janela de desconto marcada"></svg>
+    <p class="section-caption">Faixa destacada = janela de desconto solar (as horas de maior geração prevista pro dia). Previsão pública (Open-Meteo), não leitura de inversor real — ver "Roadmap GoodWe".</p>
+  </div>
+
   <footer class="hint">API em <span id="api-base-label"></span> · atualização automática a cada 4s</footer>
 </div>
 

@@ -46,8 +46,14 @@ O motor é a única fonte de verdade: API, dashboard, totem, app do motorista e 
 ```
 .env                                  DATABASE_URL + GROQ_API_KEY — NÃO existe no repo, veja "Configuração"
 render.yaml                           blueprint de deploy da API no Render (opcional, ver "Deploy")
+docs/
+├── BUSINESS_MODEL.md                 modelo de negócio e comissão (proposta, ver ressalvas no arquivo)
+├── GOODWE_ROADMAP.md                 o que já fala a língua da GoodWe hoje vs. o que uma integração real mudaria
+├── ROTEIRO_PITCH.md                  roteiro do vídeo de apresentação (3:00), com o que foi corrigido e por quê
+└── TAREFAS_EQUIPE.md                 divisão hardware/software da reta final, com contrato de API já pronto
 entregas/
 ├── ev_chargegrid.py                  motor: banco, auth, contas, pagamento, DLB, IA preditiva
+├── solar_optimizer.py                previsão de geração solar (Open-Meteo) e janela de desconto solar na tarifa
 ├── chatbot.py                        chatbot em terminal, local, sem Colab (mesma lógica do notebook)
 ├── dados_rag.json                    histórico de 60 sessões reais (base do RAG do chatbot)
 ├── modelo_demanda.pkl                modelo RandomForest treinado (previsão de demanda)
@@ -258,6 +264,45 @@ Depois de revisar o repositório de um projeto parecido de outro grupo no mesmo 
 - **Relatório do dia pra download** — `GET /api/relatorio` (admin-only, como o `/api/kpis`) monta um `.txt` com faturamento, sessões, ticket médio e consumo do dia, devolvido com `Content-Disposition: attachment` — o botão "Baixar relatório do dia" no dashboard busca via `fetch` (pra mandar o token) e baixa como arquivo.
 
 A quarta ideia — comissão/modelo de negócio documentado — virou [`docs/BUSINESS_MODEL.md`](docs/BUSINESS_MODEL.md), escrito do zero refletindo a arquitetura real daqui (nuvem, LLM real, PIN, deploy ao vivo), não uma tradução do outro projeto.
+
+### Preparação pra apresentação: solar, OCPP e telemetria de hardware
+
+A partir de uma análise competitiva (comparando o ChargeGrid com plataformas
+reais como Driivz e AMPECO), três recursos entraram — todos verificados
+contra API real antes de documentar, já que a análise que motivou isso tinha
+erros factuais sobre o próprio repositório (ver `docs/GOODWE_ROADMAP.md` pro
+detalhe da verificação):
+
+- **Janela de desconto solar** (`entregas/solar_optimizer.py`) — busca a
+  previsão de radiação solar do dia (Open-Meteo, API pública sem chave,
+  cacheada por dia) e aplica até 10% de desconto na tarifa nas horas de
+  maior geração prevista, desde que não seja horário de pico. Cai num
+  perfil sintético (formato de sino, pico ao meio-dia) se a API não
+  responder — mesma filosofia de fallback do modelo de demanda. Fica dentro
+  de `ia_calcular_tarifa`, não numa camada separada, porque o valor cobrado
+  de verdade (`simular_tempo`) e o valor mostrado no painel precisam vir do
+  mesmo cálculo — senão o motorista veria um preço na tela e pagaria outro.
+- **DLB falando o vocabulário OCPP 1.6J** (`ev_chargegrid.balancear_carga`)
+  — o algoritmo de balanceamento continua sendo rateio igualitário, isso não
+  mudou; o que mudou é que agora cada limite de potência é comunicado como
+  uma mensagem `SetChargingProfile` real (`chargingProfileId`, `stackLevel`,
+  `chargingProfilePurpose: TxDefaultProfile`, `chargingRateUnit: W`,
+  `limit`), reaproveitando o `ocpp_enviar()` que já existia pras mensagens
+  de início/fim de sessão.
+- **`POST /api/estacoes/<n>/telemetria`** — contrato pronto pra um sensor
+  físico de ocupação (ESP32 + HC-SR04) reportar presença de carro, guardado
+  em memória (`ocupacao_fisica` em cada estação do `/api/painel`, `None`
+  até algum hardware reportar pela primeira vez). Protegido por
+  `TELEMETRIA_TOKEN` opcional — sem configurar a variável, a rota fica
+  aberta (ok pra desenvolvimento com hardware na mesma rede; configure
+  antes de expor isso publicamente com hardware de verdade conectado).
+
+Também foi corrigido o roteiro do vídeo de apresentação
+([`docs/ROTEIRO_PITCH.md`](docs/ROTEIRO_PITCH.md)) pra não overclaimar coisa
+que o sistema não faz (gateway de pagamento é simulado, não "processado"
+sem qualificar) nem underclaimar o que já faz (autenticação é placa **+
+PIN**, não só placa) — e a divisão de tarefas da reta final está em
+[`docs/TAREFAS_EQUIPE.md`](docs/TAREFAS_EQUIPE.md).
 
 ## Segurança
 

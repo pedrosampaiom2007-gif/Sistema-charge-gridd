@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
 
+import solar_optimizer
+
 try:
     import requests
     _REQUESTS_DISPONIVEL = True
@@ -719,17 +721,27 @@ def ia_prever_demanda(hora: int) -> float:
 HORA_INICIO_MADRUGADA = 0
 HORA_FIM_MADRUGADA    = 6      # intervalo [0h, 6h) — antes do movimento normal começar
 DESCONTO_MADRUGADA    = 0.20   # até 20% mais barato que a tarifa base
+DESCONTO_SOLAR        = 0.10   # até 10% mais barato na janela de maior geração solar prevista
 
 
 def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
     """Fator sobre TARIFA_BASE_KWH. Sobe em horário de pico e ocupação/demanda
-    alta (já existia); desde a revisão de madrugada, também desce nas horas de
-    menor movimento (0h-5h) — um desconto, não só um teto pra sobretaxa. É a
-    diferença entre só cobrar mais caro no pico e efetivamente incentivar o
-    motorista a carregar fora dele, que é o motivo de existir tarifa dinâmica
-    numa rede elétrica: achatar a curva de demanda, não só faturar mais."""
+    alta; desce em dois incentivos diferentes, que nunca se sobrepõem:
+
+    - madrugada (0h-5h, -20%): achata o pico de demanda da rede — o motivo
+      clássico de existir tarifa dinâmica num sistema elétrico.
+    - janela solar (-10%, ver solar_optimizer.py): incentiva carregar nas
+      horas de maior geração fotovoltaica PREVISTA pro dia (Open-Meteo, sem
+      custo, sem chave) — não é geração REAL medida de um inversor (não
+      temos um GoodWe conectado pra isso), é o primeiro degrau de reagir a
+      previsão solar em vez de só a relógio. Nunca entra em hora de pico
+      (não faria sentido dar desconto justo na hora de maior demanda), nem
+      compete com o desconto de madrugada (geração solar à noite é zero, a
+      janela nunca cai lá de qualquer forma — o elif é só documentação
+      dessa garantia, não uma correção de um caso real observado)."""
     fator = 1.0
-    if hora == 12 or 18 <= hora <= 20:
+    pico = hora == 12 or 18 <= hora <= 20
+    if pico:
         fator += 0.30
     if estacoes_ativas >= 3:
         fator += 0.15
@@ -744,6 +756,8 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
         # possível se o modelo de IA prever demanda alta) de outro fator ter
         # empurrado o valor pra cima antes — o desconto nunca vira prejuízo.
         fator = max(0.80, fator - DESCONTO_MADRUGADA)
+    elif not pico and solar_optimizer.esta_em_janela_solar(hora):
+        fator = max(0.85, fator - DESCONTO_SOLAR)
     return round(fator, 2)
 
 
@@ -753,6 +767,27 @@ def contar_ativas() -> int:
 
 
 def balancear_carga() -> None:
+    """Rateio igualitário do limite do grid entre as estações ativas — o
+    ALGORITMO não mudou. O que mudou é a LINGUAGEM em que o limite é
+    comunicado: em vez de só atualizar potencia_kw em memória, cada estação
+    ativa recebe uma mensagem SetChargingProfile no formato real do OCPP
+    1.6J (chargingProfileId, stackLevel, chargingProfilePurpose,
+    chargingRateUnit, limit em W) — o mesmo vocabulário que StartTransaction/
+    StopTransaction/MeterValues já usam em ocpp_enviar().
+
+    TxDefaultProfile é o perfil correto pro nosso caso: ele vale pra
+    QUALQUER sessão que rodar naquela estação, sem precisar de um
+    agendamento específico (isso seria um TxProfile, amarrado a uma
+    transação — não temos agendamento de recarga, não seria honesto usar
+    esse tipo). stackLevel 0 porque só existe um perfil ativo por vez aqui,
+    não uma pilha de prioridades sobrepostas.
+
+    O que isso NÃO é: priorização por veículo (ex: carro com bateria mais
+    baixa recebendo mais potência) ou qualquer decisão além de "dividir
+    igual entre quem está ativo". Isso seria a evolução real do algoritmo
+    de decisão — não fizemos isso, e documentar a diferença entre "fala
+    OCPP" e "decide como OCPP" é mais honesto do que deixar a mensagem
+    parecer mais esperta do que é."""
     n = contar_ativas()
     if n == 0:
         return
@@ -761,6 +796,14 @@ def balancear_carga() -> None:
     for e in estacoes:
         if e.ativa:
             e.potencia_kw = pot
+            ocpp_enviar("SetChargingProfile", e.id_estacao, {
+                "chargingProfileId": e.id_estacao,
+                "stackLevel": 0,
+                "chargingProfilePurpose": "TxDefaultProfile",
+                "chargingProfileKind": "Absolute",
+                "chargingRateUnit": "W",
+                "limit": round(pot * 1000),
+            })
 
 
 # ─── Simulação de passagem de tempo ───────────────────────────────────────────

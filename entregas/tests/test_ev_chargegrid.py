@@ -49,7 +49,19 @@ class TestHashingEMascaramento(unittest.TestCase):
 class TestTarifacaoDinamica(unittest.TestCase):
     """ia_calcular_tarifa isolada de ia_prever_demanda: a demanda real depende
     de modelo_demanda.pkl estar carregado ou não no ambiente onde os testes
-    rodam, então mocká-la é o que torna esse teste determinístico."""
+    rodam, então mocká-la é o que torna esse teste determinístico.
+
+    Isolada também de solar_optimizer: sem o setUp/tearDown abaixo, boa parte
+    destes testes bateria de verdade na Open-Meteo (rede real) e o resultado
+    mudaria dependendo do clima/hora em que os testes rodassem — os testes
+    do desconto solar em si ficam em TestDescontoSolar, com o mock explícito."""
+
+    def setUp(self):
+        self._patch_solar = patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=False)
+        self._patch_solar.start()
+
+    def tearDown(self):
+        self._patch_solar.stop()
 
     def test_fator_base_fora_de_pico_demanda_baixa(self):
         with patch.object(cg, "ia_prever_demanda", return_value=0.5):
@@ -96,6 +108,111 @@ class TestTarifacaoDinamica(unittest.TestCase):
         with patch.object(cg, "ia_prever_demanda", return_value=0.99):
             fator = cg.ia_calcular_tarifa(hora=3, estacoes_ativas=1)
             self.assertGreaterEqual(fator, 0.80)
+
+
+class TestDescontoSolar(unittest.TestCase):
+    """O desconto solar depende de solar_optimizer.esta_em_janela_solar, que
+    é mockado diretamente aqui — não testa a busca de dados em si (isso é
+    TestSolarOptimizer), só a regra de como o resultado dela afeta o preço."""
+
+    def test_aplica_desconto_dentro_da_janela_solar(self):
+        with patch.object(cg, "ia_prever_demanda", return_value=0.5), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=10, estacoes_ativas=1), 0.90)
+
+    def test_nao_aplica_desconto_fora_da_janela_solar(self):
+        with patch.object(cg, "ia_prever_demanda", return_value=0.5), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=False):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=10, estacoes_ativas=1), 1.0)
+
+    def test_pico_tem_prioridade_sobre_janela_solar(self):
+        # hora 12 é pico de almoço — mesmo que o mock diga que é janela
+        # solar, não faria sentido dar desconto justo na hora de maior
+        # demanda, então o pico vence.
+        with patch.object(cg, "ia_prever_demanda", return_value=0.5), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=12, estacoes_ativas=1), 1.30)
+
+    def test_madrugada_tem_prioridade_sobre_janela_solar(self):
+        # cenário artificial (geração solar real é zero de madrugada), só
+        # pra garantir que a estrutura if/elif nunca aplica os dois juntos.
+        with patch.object(cg, "ia_prever_demanda", return_value=0.05), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=3, estacoes_ativas=1), 0.80)
+
+    def test_desconto_solar_nunca_passa_do_piso(self):
+        with patch.object(cg, "ia_prever_demanda", return_value=0.99), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
+            fator = cg.ia_calcular_tarifa(hora=10, estacoes_ativas=3)
+            self.assertGreaterEqual(fator, 0.85)
+
+
+class TestSolarOptimizer(unittest.TestCase):
+    """Testa solar_optimizer isoladamente, sem bater na Open-Meteo de
+    verdade — a busca real (_buscar_curva_open_meteo) é mockada em cada
+    teste; só o comportamento de cache, fallback e seleção da janela é
+    testado aqui."""
+
+    def setUp(self):
+        import solar_optimizer
+        self.solar = solar_optimizer
+        # cada teste começa com o cache vazio, senão um teste que rodou antes
+        # (ou uma chamada real durante outro teste do arquivo) vazaria estado
+        self.solar._cache_data = None
+        self.solar._cache_curva = None
+        self.solar._cache_fonte = None
+
+    def tearDown(self):
+        self.solar._cache_data = None
+        self.solar._cache_curva = None
+        self.solar._cache_fonte = None
+
+    def test_cai_no_fallback_se_a_api_falhar(self):
+        with patch.object(self.solar, "_buscar_curva_open_meteo", side_effect=TimeoutError):
+            curva = self.solar.curva_solar_hoje()
+        self.assertEqual(curva, self.solar._CURVA_FALLBACK)
+        self.assertEqual(self.solar.fonte_da_previsao(), "fallback")
+
+    def test_usa_a_curva_real_quando_a_api_responde(self):
+        curva_falsa = {h: 0.0 for h in range(24)}
+        curva_falsa[14] = 1.0
+        with patch.object(self.solar, "_buscar_curva_open_meteo", return_value=curva_falsa):
+            curva = self.solar.curva_solar_hoje()
+        self.assertEqual(curva, curva_falsa)
+        self.assertEqual(self.solar.fonte_da_previsao(), "open-meteo")
+
+    def test_so_busca_uma_vez_por_dia_mesmo_com_varias_chamadas(self):
+        with patch.object(self.solar, "_buscar_curva_open_meteo", return_value=dict(self.solar._CURVA_FALLBACK)) as mock_busca:
+            self.solar.curva_solar_hoje()
+            self.solar.curva_solar_hoje()
+            self.solar.janela_solar_hoje()
+        self.assertEqual(mock_busca.call_count, 1)
+
+    def test_janela_solar_pega_as_horas_de_maior_geracao(self):
+        curva_falsa = {h: 0.0 for h in range(24)}
+        curva_falsa[11] = curva_falsa[12] = curva_falsa[13] = curva_falsa[14] = 1.0
+        with patch.object(self.solar, "curva_solar_hoje", return_value=curva_falsa):
+            janela = self.solar.janela_solar_hoje()
+        self.assertEqual(janela, {11, 12, 13, 14})
+        self.assertEqual(len(janela), self.solar.TAMANHO_JANELA_SOLAR)
+
+    def test_esta_em_janela_solar_bate_com_janela_solar_hoje(self):
+        with patch.object(self.solar, "janela_solar_hoje", return_value={9, 10, 11, 12}):
+            self.assertTrue(self.solar.esta_em_janela_solar(10))
+            self.assertFalse(self.solar.esta_em_janela_solar(20))
+
+    def test_curva_para_api_tem_24_horas_marcando_a_janela(self):
+        curva_falsa = {h: 0.0 for h in range(24)}
+        curva_falsa[12] = 1.0
+        with patch.object(self.solar, "curva_solar_hoje", return_value=curva_falsa), \
+             patch.object(self.solar, "janela_solar_hoje", return_value={12}):
+            saida = self.solar.curva_solar_para_api()
+        self.assertEqual(len(saida), 24)
+        hora_12 = next(x for x in saida if x["hora"] == 12)
+        self.assertTrue(hora_12["janela_solar"])
+        self.assertEqual(hora_12["geracao_relativa"], 1.0)
+        hora_0 = next(x for x in saida if x["hora"] == 0)
+        self.assertFalse(hora_0["janela_solar"])
 
 
 class TestPrevisaoDemanda(unittest.TestCase):
