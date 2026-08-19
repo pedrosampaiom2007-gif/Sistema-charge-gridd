@@ -59,12 +59,15 @@ grupo de desafio, é o que o setor elétrico brasileiro está testando agora.
 
 ## Próximos passos concretos (não implementados ainda)
 
-1. Contato formal com a GoodWe pra avaliar acesso de teste à Open API SEMS
-   (via canal de parceria do próprio desafio, não como cliente comum).
-2. Trocar a mensagem `SetChargingProfile` simulada por uma implementação
+Acesso à Open API SEMS da GoodWe **já foi perguntado e negado** pelos
+organizadores do desafio — não é mais um próximo passo em aberto, é um
+limite conhecido do que dá pra fazer nesta rodada. O roadmap abaixo não
+depende disso:
+
+1. Trocar a mensagem `SetChargingProfile` simulada por uma implementação
    real de cliente OCPP 1.6J (WebSocket), testável contra um carregador
    simulado (`charger-simulator`/OpenOCPP) antes de qualquer hardware físico.
-3. Sensor físico de ocupação de vaga (ver `docs/TAREFAS_EQUIPE.md`) alimentando
+2. Sensor físico de ocupação de vaga (ver `docs/TAREFAS_EQUIPE.md`) alimentando
    o mesmo `/api/painel` que já existe — a API não precisaria mudar de forma,
    só ganhar uma fonte de dado adicional.
 
