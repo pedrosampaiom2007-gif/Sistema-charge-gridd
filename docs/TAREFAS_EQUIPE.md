@@ -1,9 +1,8 @@
 # Divisão de tarefas — reta final até 28/ago
 
 Duas frentes, sem dependência forte entre elas: **hardware** (Raul + Luan)
-e **software** (Pedro Sampaio + [segundo nome a confirmar — ver nota no
-final]). Cada tarefa abaixo já vem com o que precisa pra começar, não é só
-título solto.
+e **software** (Pedro Sampaio + Pedro Ribeiro). Cada tarefa abaixo já vem
+com o que precisa pra começar, não é só título solto.
 
 ## Hardware — Raul + Luan
 
@@ -72,13 +71,12 @@ exatamente o que a análise de mercado recomendou pra um projeto acadêmico
 neste estágio. Terminar o Papel A e deixar o Papel B pra depois da entrega
 é uma opção real, não um fracasso.
 
-## Software — Pedro Sampaio + [confirmar segundo nome]
+## Software — Pedro Sampaio + Pedro Ribeiro
 
-> **Nota:** a mensagem original dizia "Pedro S e \pedro" — não consegui
-> identificar quem é o segundo nome com certeza (o time no README é Pedro
-> Sampaio, Raul Sampaio, Lucas Garcia, Luan de Araujo, Kevin Rodrigues; com
-> Raul e Luan no hardware, sobra Lucas ou Kevin). Troquei por um
-> placeholder — me fala quem é que eu atualizo o documento.
+> **Nota resolvida:** a mensagem original dizia "Pedro S e \pedro" — o
+> segundo nome era Pedro Ribeiro (autocorretor engoliu o resto do nome).
+> Ele entrou no lugar de Lucas Garcia no time — README.md e
+> `docs/BUSINESS_MODEL.md` já foram atualizados pra refletir isso.
 
 **Pedro Sampaio — execução das melhorias.** Já feito nesta rodada (não é
 mais tarefa, é o que já está no repositório):
@@ -101,7 +99,7 @@ Próximo, se sobrar tempo:
   nenhum da tela ainda, de propósito (não fazia sentido desenhar UI pra um
   dado que sempre ia estar `null` até o hardware chegar).
 
-**[Segundo nome] — ideias e inovações.** Sem código nesta frente — é
+**Pedro Ribeiro — ideias e inovações.** Sem código nesta frente — é
 pesquisa e direção, não implementação. Sugestão de foco, dado o que já foi
 verificado nesta rodada (ver `docs/GOODWE_ROADMAP.md` pras fontes):
 - Levantar o que mudaria na história de negócio se o piloto V2G da

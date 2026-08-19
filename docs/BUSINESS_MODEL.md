@@ -109,4 +109,4 @@ O ChargeGrid Intelligence é pensado como uma plataforma SaaS de gestão de reca
 
 ## Equipe
 
-Pedro Sampaio, Raul Sampaio, Lucas Garcia, Luan de Araujo, Kevin Rodrigues — EV Challenge 2026, GoodWe / FIAP.
+Pedro Sampaio, Raul Sampaio, Pedro Ribeiro, Luan de Araujo, Kevin Rodrigues — EV Challenge 2026, GoodWe / FIAP.
