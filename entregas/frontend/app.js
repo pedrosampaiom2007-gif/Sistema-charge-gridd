@@ -17,6 +17,10 @@ document.getElementById("api-base-label").textContent = API_BASE;
 let estacaoSelecionada = null;
 let estacaoParaManutencao = null;
 let pollTimer = null;
+// Guardam a curva mais recente de cada gráfico pro tooltip ler sem precisar
+// de uma nova requisição — atualizadas a cada render, lidas a cada hover.
+let _curvaDemandaAtual = [];
+let _curvaSolarAtual = [];
 
 // ─── Autenticação de administrador ─────────────────────────────────────────────
 // /api/painel fica sem login (o totem também precisa dele) — só /api/kpis e
@@ -204,8 +208,39 @@ function renderEstacoes(estacoes) {
   });
 }
 
+// ─── Tooltip interativo (hover mostra hora + valor exato) ──────────────────────
+// Um listener por gráfico, montado uma vez só — em vez de recriar a cada
+// render (o poll roda a cada 4s, e isso vazaria um listener novo por poll).
+// A curva usada no hover vem de uma variável atualizada a cada render, não de
+// uma nova chamada à API — não faz sentido buscar dado de novo só pra mostrar
+// o que já está na tela.
+function configurarTooltipGrafico(svgId, obterCurva, formatar) {
+  const svg = document.getElementById(svgId);
+  const tooltip = document.getElementById("chart-tooltip");
+  const W = 720, padL = 30, padR = 10, plotW = W - padL - padR;
+
+  svg.addEventListener("mousemove", (e) => {
+    const curva = obterCurva();
+    if (!curva.length) return;
+    const rect = svg.getBoundingClientRect();
+    const xSvg = (e.clientX - rect.left) * (W / rect.width);
+    const horaFloat = ((xSvg - padL) / plotW) * (curva.length - 1);
+    const hora = Math.max(0, Math.min(curva.length - 1, Math.round(horaFloat)));
+    const ponto = curva[hora];
+    if (!ponto) return;
+
+    tooltip.innerHTML = formatar(hora, ponto);
+    tooltip.style.left = `${e.clientX + 14}px`;
+    tooltip.style.top = `${e.clientY - 12}px`;
+    tooltip.classList.add("show");
+  });
+
+  svg.addEventListener("mouseleave", () => tooltip.classList.remove("show"));
+}
+
 // ─── Render: gráfico de demanda ────────────────────────────────────────────────
 function renderDemandChart(curva, horaAtual) {
+  _curvaDemandaAtual = curva;
   const svg = document.getElementById("demand-chart");
   const W = 720, H = 180, padL = 30, padB = 22, padT = 12, padR = 10;
   const plotW = W - padL - padR, plotH = H - padT - padB;
@@ -260,6 +295,7 @@ function renderDemandChart(curva, horaAtual) {
 // uma terceira paleta — e uma faixa sombreada marcando a janela de desconto
 // solar, que muda de hora conforme a previsão do dia (não é um horário fixo).
 function renderSolarChart(curva, horaAtual, fonte) {
+  _curvaSolarAtual = curva;
   const svg = document.getElementById("solar-chart");
   const W = 720, H = 180, padL = 30, padB = 22, padT = 12, padR = 10;
   const plotW = W - padL - padR, plotH = H - padT - padB;
@@ -525,6 +561,14 @@ document.getElementById("overlay-manutencao").addEventListener("click", (e) => {
 document.getElementById("f-motivo-manutencao").addEventListener("keydown", (e) => {
   if (e.key === "Enter") confirmarManutencao();
 });
+
+configurarTooltipGrafico("demand-chart", () => _curvaDemandaAtual, (hora, p) =>
+  `<b>${hora}h</b><br>Demanda prevista: ${Math.round(p.demanda * 100)}%`
+);
+configurarTooltipGrafico("solar-chart", () => _curvaSolarAtual, (hora, p) =>
+  `<b>${hora}h</b><br>Geração solar: ${Math.round(p.geracao_relativa * 100)}%` +
+  (p.janela_solar ? `<br><span class="tt-accent">☀ janela de desconto</span>` : "")
+);
 
 // ─── Início ──────────────────────────────────────────────────────────────────────
 if (adminToken) {

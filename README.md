@@ -30,6 +30,7 @@ O motor (`entregas/ev_chargegrid.py`) controla até 10 estações de recarga: au
 | ☀️ [`docs/GOODWE_ROADMAP.md`](docs/GOODWE_ROADMAP.md) | O que já fala a língua da GoodWe hoje (solar, OCPP) vs. o que uma integração real mudaria |
 | 🎬 [`docs/ROTEIRO_PITCH.md`](docs/ROTEIRO_PITCH.md) | Roteiro do vídeo de apresentação (3:00), com o que foi corrigido e por quê |
 | ✅ [`docs/TAREFAS_EQUIPE.md`](docs/TAREFAS_EQUIPE.md) | Divisão hardware/software da reta final, com contrato de API já pronto |
+| 🧪 [`docs/DADOS_TESTE.md`](docs/DADOS_TESTE.md) | Placas, PIN e login do admin já populados no banco — pronto pra gravar o vídeo sem cadastrar nada na hora |
 
 <br>
 

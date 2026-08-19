@@ -39,6 +39,28 @@ detalhe. Não forcei essa frase no roteiro porque o fechamento já está no
 limite de tempo; se sobrar fôlego na gravação, pode entrar como legenda na
 tela em vez de fala.
 
+### Segunda revisão — três coisas mudaram de novo
+
+1. **Fechamento**: tirado "acesso real à API da GoodWe" da lista de
+   próximos passos — os organizadores do desafio já confirmaram que não
+   vão liberar. Ficaram só os dois passos que não dependem disso (cliente
+   OCPP real, sensor físico).
+2. **Diferencial e maturidade**: contagem de testes trocada de "mais de
+   50" pra **53** (número exato — mais crível que arredondado), e ganhou
+   uma frase concreta sobre a auditoria de segurança real (achamos e
+   corrigimos uma falha de autorização de verdade antes de qualquer banca
+   ver, não é só "revisamos o código").
+3. **Pilar 1**: a dica de `(MOSTRAR: ...)` agora pede pra passar o mouse
+   nos gráficos durante a gravação — os dois (demanda e geração solar) já
+   respondem a hover com tooltip mostrando a hora e o valor exato. É um
+   detalhe de acabamento que fica bem na câmera e não custa segundo
+   nenhum de fala.
+
+**Dados de teste já populados pro vídeo** (10 placas, sessões pagas no
+histórico, 3 estações ocupadas de verdade, 1 em manutenção) — ver
+`docs/DADOS_TESTE.md` pra login exato de cada tela e sugestão de ordem de
+gravação que aproveita esses dados sem precisar cadastrar nada na hora.
+
 ---
 
 ## 0:00 – 0:15 | Gancho / Problema (15s)
@@ -66,7 +88,9 @@ usuário — tudo rodando em nuvem, de verdade, não só no papel."
 
 **FALA:** "O primeiro pilar é o cérebro do sistema: o balanceamento de carga
 entre estações. (MOSTRAR: dashboard com as estações ativas, a distribuição
-de carga e o gráfico de geração solar prevista) Quando várias estações
+de carga, e passe o mouse pelos gráficos de demanda e geração solar — os
+dois respondem com tooltip mostrando a hora e o valor exato) Quando várias
+estações
 estão em uso, o sistema redistribui a energia em tempo real, comunicando
 cada limite de potência no padrão aberto OCPP — o mesmo idioma que
 carregadores comerciais reais falam. E a tarifa já reage à previsão de
@@ -105,23 +129,29 @@ abaixo.)*
 ## 2:25 – 2:45 | Diferencial e maturidade do projeto (20s)
 
 **FALA:** "Diferente de um protótipo de papel, o ChargeGrid já está no ar:
-banco de dados em nuvem, API funcionando, mais de 50 testes automatizados,
-deploy feito e testado. (MOSTRAR: código ou painel de deploy, se der tempo)
-Esse é o nosso principal diferencial — não é uma ideia, é um sistema
-rodando de ponta a ponta, pronto pra evoluir."
+banco de dados em nuvem, API funcionando, 53 testes automatizados, deploy
+testado — e já passou por uma auditoria de segurança de verdade, incluindo
+uma falha real de autorização que a gente encontrou e corrigiu antes de
+qualquer banca ver. (MOSTRAR: código, painel de deploy, ou os testes
+rodando no terminal, se der tempo) Esse é o nosso principal diferencial —
+não é uma ideia, é um sistema rodando de ponta a ponta, testado e seguro,
+pronto pra evoluir."
 
 ## 2:45 – 3:00 | Próximos passos + fechamento (15s)
 
 **FALA:** "Já temos a tarifa reagindo à previsão de sol e o balanceamento
 de carga falando o padrão aberto OCPP — alinhados com o próprio DNA da
-GoodWe. Os próximos passos: acesso real à API da GoodWe e um sensor físico
-de ocupação de vaga. ChargeGrid Intelligence: gestão de recarga pronta pra
-escalar. Obrigado."
+GoodWe. Os próximos passos: um cliente OCPP real conversando com hardware
+de verdade, e o sensor físico de ocupação de vaga. ChargeGrid Intelligence:
+gestão de recarga pronta pra escalar. Obrigado."
 
-**Isso substitui o "queremos conectar à energia solar" da versão anterior**
-— não removemos o OCPP e o sensor físico da lista de próximos passos porque
-esses dois continuam sendo trabalho futuro de verdade (ver
-`docs/TAREFAS_EQUIPE.md`).
+**Histórico**: a primeira versão do roteiro dizia "queremos conectar à
+energia solar" como desejo — trocamos porque já implementamos. A segunda
+versão dizia "acesso real à API da GoodWe" como próximo passo — trocamos
+de novo porque os organizadores já confirmaram que isso não vai acontecer
+nesta rodada (ver `docs/GOODWE_ROADMAP.md`). Os dois passos que sobraram
+(cliente OCPP real, sensor físico) continuam sendo trabalho futuro de
+verdade, sem depender de nada externo — ver `docs/TAREFAS_EQUIPE.md`.
 
 ---
 
@@ -132,6 +162,9 @@ esses dois continuam sendo trabalho futuro de verdade (ver
       tela abrindo — o Render em plano gratuito hiberna e a primeira
       chamada depois de um tempo parado pode falhar uma vez antes de
       responder)
+- [ ] Login e placas pra usar na gravação já estão em `docs/DADOS_TESTE.md`
+      — não precisa cadastrar nada na hora, o dashboard já abre com dado
+      de verdade (estações ocupadas, faturamento, histórico populado)
 - [ ] Testar o chatbot com a pergunta que vai aparecer no vídeo (evitar
       resposta errada ao vivo) — **evite perguntar sobre faturamento ou
       receita durante a demonstração do app/totem**: desde a revisão de
