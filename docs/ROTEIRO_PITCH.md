@@ -90,18 +90,18 @@ usuário — tudo rodando em nuvem, de verdade, não só no papel."
 entre estações. (MOSTRAR: dashboard com as estações ativas, a distribuição
 de carga, e passe o mouse pelos gráficos de demanda e geração solar — os
 dois respondem com tooltip mostrando a hora e o valor exato) Quando várias
-estações
-estão em uso, o sistema redistribui a energia em tempo real, comunicando
-cada limite de potência no padrão aberto OCPP — o mesmo idioma que
-carregadores comerciais reais falam. E a tarifa já reage à previsão de
+estações estão em uso, o sistema redistribui a energia em tempo real,
+comunicando cada limite de potência no padrão aberto OCPP — o mesmo idioma
+que carregadores comerciais reais falam. E a tarifa já reage à previsão de
 geração solar do dia, dando desconto pro motorista que carrega no horário
-de mais sol — o mesmo princípio das operadoras reais do mercado, como a
-Driivz."
+de mais sol."
 
-**Cresceu ~15 palavras em relação à versão anterior** — cronometre esse
-bloco especificamente antes de gravar o vídeo final; se passar de 40s, o
-primeiro corte aqui é "o mesmo princípio das operadoras reais do mercado,
-como a Driivz" (frase que reforça, mas não é essencial).
+**Terceira revisão**: cortada a comparação "o mesmo princípio das
+operadoras reais do mercado, como a Driivz" — não é sobre não confiar no
+fato, é que citar concorrente em cima do nosso próprio pilar mais forte
+divide a atenção de quem assiste e não ajuda a vender o nosso sistema.
+Cortado direto, não como "se passar do tempo" — o julgamento aqui é que a
+frase enfraquecia mais do que ajudava, independente do cronômetro.
 
 ## 1:15 – 1:50 | Pilar 2 — Sistema de cobrança das recargas (35s)
 
@@ -115,16 +115,20 @@ de segurança seguindo boas práticas de LGPD."
 
 ## 1:50 – 2:25 | Pilar 3 — Recarga inteligente + interface do usuário (35s)
 
-**FALA:** "O terceiro pilar é a experiência de quem usa. (MOSTRAR: totem,
-app do motorista e o chatbot respondendo uma pergunta) Temos três
-interfaces conectadas ao mesmo motor: o totem no ponto de recarga, o app do
-motorista e um dashboard de gestão pra quem administra a operação. E pra
-tirar dúvidas na hora, criamos um chatbot com inteligência artificial que
-responde sobre o funcionamento do sistema em tempo real."
+**FALA:** "O terceiro pilar é a experiência de quem usa — e é aqui que mora
+um dos nossos maiores diferenciais. (MOSTRAR: totem, app do motorista e o
+chatbot respondendo uma pergunta) Temos três interfaces conectadas ao mesmo
+motor: totem, app do motorista e dashboard de gestão. E o assistente não é
+um bot de resposta pronta — é uma inteligência artificial de verdade, que
+entende a pergunta, sabe o que está acontecendo no sistema agora, e ainda
+tira dúvida geral sobre carro elétrico."
 
-*(sem alteração de conteúdo — já era preciso. Atenção só no checklist: a
-pergunta que aparecer no vídeo precisa ser uma que o chat responde bem, ver
-abaixo.)*
+**Terceira revisão**: essa parte ganhou peso — o time decidiu que o
+chatbot é o maior diferencial do sistema, junto com o caminho de hardware
+físico que vem no fechamento, então a fala deixou de tratar o assistente
+como "mais uma tela" e passou a nomear ele como diferencial de propósito.
+Atenção no checklist: a pergunta que aparecer no vídeo precisa ser uma que
+o chat responde bem, ver abaixo.
 
 ## 2:25 – 2:45 | Diferencial e maturidade do projeto (20s)
 
@@ -132,10 +136,16 @@ abaixo.)*
 banco de dados em nuvem, API funcionando, 53 testes automatizados, deploy
 testado — e já passou por uma auditoria de segurança de verdade, incluindo
 uma falha real de autorização que a gente encontrou e corrigiu antes de
-qualquer banca ver. (MOSTRAR: código, painel de deploy, ou os testes
-rodando no terminal, se der tempo) Esse é o nosso principal diferencial —
-não é uma ideia, é um sistema rodando de ponta a ponta, testado e seguro,
-pronto pra evoluir."
+qualquer banca ver. Esse é o nosso principal diferencial — não é uma
+ideia, é um sistema rodando de ponta a ponta, testado e seguro, pronto pra
+evoluir."
+
+**Terceira revisão**: tirado o `(MOSTRAR: código/terminal/deploy)` — a
+banca não quer ver código ou terminal, quer ver o sistema funcionando. O
+número (53 testes, deploy testado) já prova maturidade só de ser
+**falado** com confiança; não precisa de tela de código pra sustentar.
+Continue mostrando o sistema de verdade (a tela que já estava aberta do
+Pilar 3) em vez de cortar pra outra coisa aqui.
 
 ## 2:45 – 3:00 | Próximos passos + fechamento (15s)
 
