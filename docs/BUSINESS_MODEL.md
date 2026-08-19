@@ -23,9 +23,9 @@ A maioria das soluções desse porte resolve pedaços disso isoladamente (um app
 - **Dashboard em tempo real**, com login de administrador de verdade (não senha fixa sem controle) — faturamento, curva de demanda prevista por IA, e estado de cada estação.
 - **Tarifação dinâmica** por horário, ocupação simultânea e demanda prevista por um modelo de machine learning (RandomForest treinado com dados reais) — inclusive desconto de madrugada, pra incentivar o motorista a carregar fora do pico em vez de só cobrar mais caro dentro dele.
 - **Balanceamento de carga (DLB)** entre as estações ativas, respeitando o limite de potência da rede.
-- **Contas com PIN**, suportando mais de uma placa por pessoa — histórico de pagamento protegido por autenticação de verdade, não por "quem sabe a placa consegue ver".
+- **Contas com PIN**, suportando mais de uma placa por pessoa — histórico de pagamento protegido por autenticação de verdade.
 - **Manutenção de estação**: um carregador com defeito sai de circulação sem sumir do sistema, e sem interromper quem já está no meio de uma sessão.
-- **Assistente com IA de verdade** (LLM via Groq, não um bot de palavra-chave), que responde tanto sobre o sistema quanto dúvidas gerais de carro elétrico — com uma fronteira de acesso que impede o motorista de puxar faturamento do negócio pelo chat, e libera esse mesmo dado pra quem está logado como gestor.
+- **Assistente com IA de verdade** (LLM via Groq), que responde tanto sobre o sistema quanto dúvidas gerais de carro elétrico — com uma fronteira de acesso que impede o motorista de puxar faturamento do negócio pelo chat, e libera esse mesmo dado pra quem está logado como gestor.
 - **Relatório do dia** exportável em um clique, pro gestor levar o resumo da operação pra fora do sistema.
 - **Banco na nuvem**: qualquer terminal — totem, dashboard, app do motorista — lê e escreve no mesmo estado, de qualquer lugar, não só de uma máquina que precisa ficar ligada no local.
 
@@ -50,7 +50,7 @@ Estabelecimentos comerciais que quiserem oferecer recarga como diferencial compe
 
 ## Fluxo operacional
 
-Diferente de um sistema onde o operador registra manualmente o início/fim de cada sessão, aqui o fluxo é automatizado ponta a ponta:
+O fluxo é automatizado ponta a ponta:
 
 ```
 Motorista chega ao totem
@@ -69,7 +69,7 @@ Pagamento confirmado automaticamente
         └── 12% → GoodWe (comissão)            ainda não calculado pelo sistema, ver "Modelo comercial")
 ```
 
-O administrador só entra no fluxo pra decisões operacionais (marcar manutenção, consultar relatório) — não pra registrar cada sessão manualmente.
+O administrador só entra no fluxo pra decisões operacionais: marcar manutenção, consultar relatório.
 
 ## Modelo comercial
 
@@ -96,11 +96,11 @@ A IA aqui não é um recurso decorativo — ela participa de duas decisões de n
 
 ## Diferenciais da solução
 
-- Nuvem desde o início — não um sistema de arquivo local que só funciona numa máquina.
+- Nuvem desde o início, acessível de qualquer lugar, não só de uma máquina específica.
 - Tarifação dinâmica de verdade (horário + ocupação + IA), com incentivo de madrugada, não só sobretaxa de pico.
-- Autenticação real em cada camada (PIN do motorista, login do admin) — histórico de pagamento não depende de "só quem sabe a placa vê".
-- Assistente com IA de linguagem natural real, com fronteira de dado de negócio — não um bot de palavra-chave sem controle de acesso.
-- Manutenção de estação como estado de primeira classe, não um gambiarra de desligar o carregador.
+- Autenticação real em cada camada (PIN do motorista, login do admin).
+- Assistente com IA de linguagem natural real, com fronteira de dado de negócio.
+- Manutenção de estação como estado de primeira classe: persistido no banco, com regras próprias de bloqueio.
 - Já publicado e acessível publicamente, pronto pra demonstração fora do ambiente de desenvolvimento.
 
 ## Visão de produto
