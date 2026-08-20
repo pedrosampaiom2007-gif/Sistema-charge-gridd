@@ -13,8 +13,9 @@ batiam com o sistema real, ou porque o sistema evoluiu desde que o texto foi
 escrito:
 
 1. **"O pagamento é processado por um gateway integrado"** virou **"gateway
-   integrado em modo sandbox"** — o gateway é simulado (sandbox Mercado
-   Pago), dizer só "processado" sem qualificar soa como produção real.
+   integrado em modo sandbox"** — o gateway é simulado: gera um ID de
+   transação fake (`SIM-...`), sem gateway real por trás. Dizer só
+   "processado" sem qualificar soa como produção real.
 2. **"autenticação do motorista é feita por placa"** virou **"placa mais PIN
    de 4 dígitos"** — isso é uma correção que deixa o roteiro **mais forte**,
    não mais fraco: o sistema evoluiu pra exigir PIN depois que a versão
@@ -61,6 +62,80 @@ histórico, 3 estações ocupadas de verdade, 1 em manutenção) — ver
 `docs/DADOS_TESTE.md` pra login exato de cada tela e sugestão de ordem de
 gravação que aproveita esses dados sem precisar cadastrar nada na hora.
 
+### Quinta revisão — tecnologias nomeadas + tarifa como diferencial explícito
+
+1. **Tecnologias citadas** (superficial, sem parar pra explicar nenhuma):
+   machine learning (Pilar 1, previsão de demanda), Open-Meteo (Pilar 1,
+   fonte da previsão solar), Groq (Pilar 3, o modelo de linguagem por trás
+   do chat), Python e Postgres (maturidade, back-end e banco em nuvem).
+   Objetivo é só ancorar que cada peça do sistema é tecnologia real e
+   nomeável, não inventar tempo de fala novo explicando cada uma.
+   **Correção**: a primeira versão desta revisão citava "gateway do Mercado
+   Pago" no Pilar 2 — errado. `USAR_API_REAL_MERCADOPAGO` existe no código
+   mas fica `False` por padrão; o pagamento simulado que roda de verdade
+   (`criar_pagamento_sandbox`) nunca chama a API da Mercado Pago, só gera
+   um ID de transação fake. O que aparece de verdade na tela são os
+   métodos PIX / Cartão / App / QR code — voltei o Pilar 2 pra citar isso
+   em vez de um gateway que não roda no sistema.
+2. **Pilar 1 e 2**: "horário de pico" virou "horário de pico **da rede**" /
+   "**real** da rede" — reflete a correção que fizemos na lógica da tarifa
+   (`ev_chargegrid.ia_calcular_tarifa`): antes, meio-dia também contava como
+   pico só pela demanda de almoço nas estações, cobrando duas vezes pelo
+   mesmo motivo e nunca deixando o meio-dia pegar desconto solar de
+   verdade. Agora pico é só o horário de ponta real da rede elétrica —
+   coerente com a frase que já estava no roteiro ("a mesma ideia de tarifa
+   inteligente que reage à disponibilidade solar que a GoodWe já promove
+   com o app SEMS", ver `docs/GOODWE_ROADMAP.md`), que antes da correção
+   era descrição e comportamento **diferentes** do sistema no horário que
+   mais importa.
+3. **Cortado "assim como fazem redes reais tipo Tesla e EVgo" do Pilar 2**
+   — mesmo raciocínio da Terceira revisão que já tinha cortado a
+   comparação com a Driivz no Pilar 1: citar concorrente em cima do nosso
+   diferencial mais forte divide atenção, não ajuda a vender. O espaço
+   liberado virou a frase mais precisa sobre horário de pico real.
+4. **No sistema, não só no roteiro**: totem e dashboard agora mostram um
+   aviso "⚡ horário de ponta da rede" (cor âmbar) quando o pico está
+   ativo, distinto visualmente do desconto de madrugada/solar (cor cyan) —
+   antes disso só existia o aviso de desconto, sem indicar quando a tarifa
+   está mais cara e por quê. Então quem grava (ou quem testar o sistema ao
+   vivo na banca) vê o mesmo diferencial que o roteiro descreve, não só
+   ouve sobre ele.
+5. **Orçamento de tempo**: as mudanças acima somam poucas palavras por
+   pilar (a maior parte foi substituição, não adição pura — cortar
+   Tesla/EVgo pagou a maior parte do texto novo). Ainda assim, **cronometre
+   de novo antes de gravar** (já era item do checklist abaixo). Se passar
+   de 3:00, corte primeiro o item 1 desta revisão (os nomes de tecnologia
+   são reforço, não essenciais) antes de mexer nos 3 pilares principais.
+
+### Sexta revisão — só Pix tem tela ao vivo, e o benefício pra empresa
+
+1. **Pilar 2: "PIX, cartão, app ou QR code" virou só "via Pix"**. Motivo:
+   o totem tem 4 botões de método de pagamento, mas só um fluxo de
+   confirmação existe de verdade — a tela de pagamento (`screen-pagamento`
+   em `entregas/files/index.html`) tem o texto fixo "Escaneie para pagar
+   via Pix" e gera um QR code real (biblioteca `QRCode`), **sempre**,
+   não importa qual botão foi clicado antes. Cartão/App/QR Code são
+   rótulos que ficam salvos na sessão (aparecem no histórico, no
+   relatório), mas não têm tela própria — gravar qualquer um deles ainda
+   mostraria a tela do Pix, o que ia contradizer a fala. `metodoSelecionado
+   = "PIX"` já é o padrão do totem, então não precisa nem trocar nada na
+   gravação — só não selecionar outro chip antes de encerrar a sessão.
+2. **Benefício pra empresa, não só pro motorista**: o roteiro descrevia
+   cashback e tarifa como coisa boa pro motorista, mas quem decide comprar
+   a plataforma é o estabelecimento (shopping, posto, condomínio) — o
+   cashback vira argumento de venda pra ele: fideliza cliente e traz
+   recorrência pro local que tem as estações, não só desconto avulso.
+   Ligado direto ao modelo de receita (88% fica com o estabelecimento, ver
+   `docs/BUSINESS_MODEL.md`): mais gente voltando pra carregar é mais
+   receita pra quem investiu na infraestrutura.
+3. **Tempo**: item 1 troca "PIX, cartão, app ou QR code" (7 palavras) por
+   "via Pix" (2) e corta a frase de hash/LGPD (8 palavras) — economia de
+   ~13 palavras. Item 2 (cashback/fidelização) usa umas 20 palavras. Saldo
+   líquido de +7 palavras no Pilar 2 (~3-4s nesse ritmo de fala) — dentro
+   do que a cronometragem de teste (checklist) deve pegar se passar do
+   limite; se precisar cortar, tire a frase de cashback antes da de
+   tarifa/pico, que é o pilar técnico mais forte do vídeo.
+
 ---
 
 ## 0:00 – 0:15 | Gancho / Problema (15s)
@@ -86,15 +161,15 @@ usuário — tudo rodando em nuvem, de verdade, não só no papel."
 
 ## 0:35 – 1:15 | Pilar 1 — Gerenciamento inteligente da demanda de potência (40s)
 
-**FALA:** "O primeiro pilar é o cérebro do sistema: o balanceamento de carga
-entre estações. (MOSTRAR: dashboard com as estações ativas, a distribuição
-de carga, e passe o mouse pelos gráficos de demanda e geração solar — os
-dois respondem com tooltip mostrando a hora e o valor exato) Quando várias
-estações estão em uso, o sistema redistribui a energia em tempo real,
-comunicando cada limite de potência no padrão aberto OCPP — o mesmo idioma
-que carregadores comerciais reais falam. E a tarifa já reage à previsão de
-geração solar do dia, dando desconto pro motorista que carrega no horário
-de mais sol."
+**FALA:** "O primeiro pilar é o cérebro do sistema: previsão de demanda com
+machine learning e balanceamento de carga entre estações. (MOSTRAR: dashboard
+com as estações ativas, a distribuição de carga, e passe o mouse pelos
+gráficos de demanda e geração solar — os dois respondem com tooltip
+mostrando a hora e o valor exato) O sistema redistribui a energia em tempo
+real, falando o padrão aberto OCPP — o mesmo idioma que carregadores
+comerciais reais falam. E a tarifa reage a dois sinais reais: horário de
+pico da rede e geração solar prevista pela Open-Meteo, com desconto pro
+motorista que carrega no horário de mais sol."
 
 **Terceira revisão**: cortada a comparação "o mesmo princípio das
 operadoras reais do mercado, como a Driivz" — não é sobre não confiar no
@@ -105,13 +180,14 @@ frase enfraquecia mais do que ajudava, independente do cronômetro.
 
 ## 1:15 – 1:50 | Pilar 2 — Sistema de cobrança das recargas (35s)
 
-**FALA:** "O segundo pilar é a cobrança. (MOSTRAR: tela de simulação de
-pagamento / tarifação, e o totem pedindo placa + PIN) O ChargeGrid calcula
-o valor por energia consumida, com tarifação dinâmica que varia por
-horário, ocupação e até previsão de sol — assim como fazem redes reais tipo
-Tesla e EVgo. O pagamento passa por um gateway integrado em modo sandbox, e
-a conta do motorista é protegida por placa mais PIN de 4 dígitos, com hash
-de segurança seguindo boas práticas de LGPD."
+**FALA:** "O segundo pilar é a cobrança. (MOSTRAR: totem gerando o QR code
+de pagamento via Pix, e pedindo placa + PIN) O ChargeGrid calcula o valor
+por energia consumida, com tarifação dinâmica ligada ao horário de pico
+real da rede, à ocupação das estações e à previsão de geração solar do
+dia. O pagamento é simulado em modo sandbox via Pix, e a conta do
+motorista é protegida por placa mais PIN de 4 dígitos. Todo motorista
+ainda ganha 5% de cashback carregando pela ChargeGrid — fideliza cliente e
+traz recorrência pra quem opera as estações."
 
 ## 1:50 – 2:25 | Pilar 3 — Recarga inteligente + interface do usuário (35s)
 
@@ -119,9 +195,9 @@ de segurança seguindo boas práticas de LGPD."
 app do motorista e o chatbot respondendo uma pergunta) Temos três
 interfaces conectadas ao mesmo motor: totem, app do motorista e dashboard
 de gestão. E o assistente não é um bot de resposta pronta — é uma
-inteligência artificial de verdade, que entende a pergunta, sabe o que está
-acontecendo no sistema agora, e ainda tira dúvida geral sobre carro
-elétrico."
+inteligência artificial de verdade rodando via Groq, que entende a
+pergunta, sabe o que está acontecendo agora, e ainda tira dúvida geral
+sobre carro elétrico."
 
 **Quarta revisão**: tirado "é aqui que mora um dos nossos maiores
 diferenciais" — quem é diferente não precisa dizer que é diferente, só
@@ -134,7 +210,7 @@ responde bem, ver abaixo.
 ## 2:25 – 2:45 | Diferencial e maturidade do projeto (20s)
 
 **FALA:** "Diferente de um protótipo de papel, o ChargeGrid já está no ar:
-banco de dados em nuvem, API funcionando, 53 testes automatizados, deploy
+banco de dados Postgres em nuvem, back-end em Python, 53 testes automatizados, deploy
 testado — e já passou por uma auditoria de segurança de verdade, incluindo
 uma falha real de autorização que a gente encontrou e corrigiu antes de
 qualquer banca ver."
