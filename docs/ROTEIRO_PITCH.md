@@ -228,11 +228,11 @@ gasta tempo à toa.
 
 **FALA:** "Já temos a tarifa reagindo à previsão de sol e o balanceamento
 de carga falando o padrão aberto OCPP — alinhados com o próprio DNA da
-GoodWe. E o próximo passo já está em andamento: um cliente OCPP real
-conversando com hardware físico de verdade, com o sensor de ocupação que
-a nossa própria equipe está montando agora. É isso que vai levar o
-ChargeGrid ainda mais longe. ChargeGrid Intelligence: gestão de recarga
-pronta pra escalar. Obrigado."
+GoodWe. E o próximo passo já está em andamento: o sensor físico de
+ocupação, ESP32 com sensor ultrassônico, com firmware e endpoint da API já
+validados em simulação real — a montagem física é a etapa seguinte. É
+isso que vai levar o ChargeGrid ainda mais longe. ChargeGrid Intelligence:
+gestão de recarga pronta pra escalar. Obrigado."
 
 **Quarta revisão**: o fechamento ficou mais claro sobre o hardware físico
 ser o que empurra o projeto além do que já está pronto — "está em
@@ -241,6 +241,26 @@ que não é só uma ideia na lista, é trabalho real acontecendo em paralelo
 (o Raul e o Luan). É aqui, não no meio do vídeo, que faz sentido apontar
 pra frente — o resto do roteiro mostra o que já está pronto, o fechamento
 mostra pra onde vai.
+
+**Sétima revisão — "montando agora" virou "validado em simulação"**: pedido
+pra checar se o sensor físico é viável antes de prometer no vídeo. Resposta:
+tecnicamente sim — é o mesmo ESP32 + sensor ultrassônico (HC-SR04) que o
+próprio material de dicas do desafio (`PCP - Extra - Challenge GoodWe
+Dicas.pdf`, do professor Alexandre Russi Jr.) recomenda em tutorial
+("Monitorando consumo de energia com ESP32"), e o endpoint que o firmware
+vai chamar (`POST /api/estacoes/<n>/telemetria`) já existe e está pronto,
+documentado em `docs/TAREFAS_EQUIPE.md`. O que não dá pra garantir é que a
+montagem física — comprar peça, montar, resolver Wi-Fi instável — termine
+a tempo da entrega de 28/ago: faltam só 8 dias (hoje é 20/ago), e o próprio
+`docs/TAREFAS_EQUIPE.md` já previu esse risco, com um plano B explícito:
+"o Wokwi sozinho já mostra o conceito funcionando... terminar a simulação e
+deixar a montagem física pra depois da entrega é uma opção real, não um
+fracasso." Por isso o fechamento agora promete só o que dá pra garantir sem
+depender de frete ou sorte de fiação: circuito + firmware validados em
+simulação (Wokwi), API pronta esperando o hardware. Se Raul e Luan já
+tiverem montado fisicamente até a gravação, é só trocar "validados em
+simulação real" por "montado e testado" — mais forte ainda, e continua
+verdade.
 
 **Histórico**: a primeira versão do roteiro dizia "queremos conectar à
 energia solar" como desejo — trocamos porque já implementamos. A segunda
@@ -274,4 +294,8 @@ verdade, sem depender de nada externo — ver `docs/TAREFAS_EQUIPE.md`.
       Pilar 3 ou a maturidade, nunca os 3 pilares principais (valem 45 dos
       100 pontos). O Pilar 1 cresceu nesta revisão — é o primeiro lugar pra
       olhar se passar do tempo.
+- [ ] Confirmar com Raul e Luan o status real do sensor físico antes de
+      gravar o fechamento — se a montagem física já estiver pronta e
+      testada, trocar "validados em simulação real" por "montado e
+      testado" no Pilar de fechamento (ver Sétima revisão)
 - [ ] Gravar em ambiente silencioso, câmera/tela em boa resolução
