@@ -538,7 +538,63 @@ async function baixarRelatorio() {
   }
 }
 
+// ─── Assistente IA (painel lateral) ────────────────────────────────────────────
+function abrirPainelIA() {
+  if (!adminToken) { showToast("Faça login para usar o assistente."); return; }
+  document.getElementById("ia-panel").classList.add("open");
+  document.getElementById("ia-panel-backdrop").classList.add("open");
+  document.getElementById("ia-panel").setAttribute("aria-hidden", "false");
+  document.getElementById("ia-chat-input").focus();
+}
+
+function fecharPainelIA() {
+  document.getElementById("ia-panel").classList.remove("open");
+  document.getElementById("ia-panel-backdrop").classList.remove("open");
+  document.getElementById("ia-panel").setAttribute("aria-hidden", "true");
+}
+
+function adicionarMensagemIA(quem, texto, temporaria = false) {
+  const box = document.getElementById("ia-chat-mensagens");
+  const div = document.createElement("div");
+  div.className = `msg ${quem}` + (temporaria ? " temp" : "");
+  div.textContent = texto;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+async function enviarPerguntaIA() {
+  const input = document.getElementById("ia-chat-input");
+  const pergunta = input.value.trim();
+  if (!pergunta || !adminToken) return;
+  input.value = "";
+
+  adicionarMensagemIA("voce", pergunta);
+  const temp = adicionarMensagemIA("bot", "Pensando...", true);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` },
+      body: JSON.stringify({ pergunta }),
+    });
+    const data = await res.json();
+    temp.remove();
+    adicionarMensagemIA("bot", res.ok ? data.resposta : (data.erro || "Não consegui responder agora."));
+  } catch (err) {
+    temp.remove();
+    adicionarMensagemIA("bot", "Sem conexão com o servidor.");
+  }
+}
+
 // ─── Listeners globais ──────────────────────────────────────────────────────────
+document.getElementById("btn-abrir-ia").addEventListener("click", abrirPainelIA);
+document.getElementById("btn-fechar-ia").addEventListener("click", fecharPainelIA);
+document.getElementById("ia-panel-backdrop").addEventListener("click", fecharPainelIA);
+document.getElementById("btn-enviar-ia").addEventListener("click", enviarPerguntaIA);
+document.getElementById("ia-chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") enviarPerguntaIA();
+});
 document.getElementById("btn-refresh").addEventListener("click", refresh);
 document.getElementById("btn-cancel").addEventListener("click", fecharModal);
 document.getElementById("btn-confirm").addEventListener("click", confirmarInicio);
@@ -546,7 +602,7 @@ document.getElementById("overlay").addEventListener("click", (e) => {
   if (e.target.id === "overlay") fecharModal();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") fecharModal();
+  if (e.key === "Escape") { fecharModal(); fecharPainelIA(); }
 });
 document.getElementById("btn-login").addEventListener("click", fazerLogin);
 document.getElementById("f-admin-senha").addEventListener("keydown", (e) => {

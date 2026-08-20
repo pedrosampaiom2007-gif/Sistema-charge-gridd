@@ -90,6 +90,27 @@
   <footer class="hint">API em <span id="api-base-label"></span> · atualização automática a cada 4s</footer>
 </div>
 
+<!-- Botão flutuante que abre o assistente IA na lateral -->
+<button class="ia-fab" id="btn-abrir-ia" aria-label="Abrir assistente ChargeGrid" title="Assistente ChargeGrid">IA</button>
+
+<div class="ia-panel-backdrop" id="ia-panel-backdrop"></div>
+<aside class="ia-panel" id="ia-panel" aria-hidden="true">
+  <div class="ia-panel-head">
+    <h3>Assistente ChargeGrid</h3>
+    <button class="btn small" id="btn-fechar-ia">Fechar</button>
+  </div>
+  <p class="section-caption">Pergunte sobre faturamento, sessões do dia ou dúvidas gerais de carro elétrico.</p>
+  <div class="chat-box">
+    <div class="chat-mensagens" id="ia-chat-mensagens">
+      <div class="msg bot">Oi! Posso ajudar com faturamento, sessões do dia e dúvidas gerais sobre carro elétrico.</div>
+    </div>
+    <div class="chat-input-row">
+      <input id="ia-chat-input" placeholder="Digite sua pergunta..." autocomplete="off">
+      <button class="btn" id="btn-enviar-ia">Enviar</button>
+    </div>
+  </div>
+</aside>
+
 <!-- Modal: login de administrador (bloqueia o painel até logar) -->
 <div class="overlay open" id="overlay-login">
   <div class="modal">
