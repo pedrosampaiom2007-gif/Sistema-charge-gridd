@@ -223,6 +223,7 @@ def painel():
         "tarifa_kwh_agora": round(cg.TARIFA_BASE_KWH * fator_tarifa, 2),
         "tarifa_madrugada_ativa": cg.HORA_INICIO_MADRUGADA <= hora_atual < cg.HORA_FIM_MADRUGADA,
         "tarifa_solar_ativa": solar.esta_em_janela_solar(hora_atual),
+        "tarifa_pico_ativa": cg.HORA_INICIO_PICO <= hora_atual <= cg.HORA_FIM_PICO,
         "atualizado_em": datetime.datetime.now().isoformat(),
     })
 
@@ -497,7 +498,12 @@ def api_historico_usuario():
         return jsonify({"erro": "Informe a placa e o PIN."}), 400
     if not cg.validar_pin(placa, pin):
         return jsonify({"erro": "Placa ou PIN incorretos."}), 403
-    return jsonify({"placa": placa.strip().upper(), "sessoes": cg.historico_usuario(placa)})
+    sessoes = cg.historico_usuario(placa)
+    return jsonify({
+        "placa": placa.strip().upper(),
+        "sessoes": sessoes,
+        "cashback_total": round(sum(s["cashback"] for s in sessoes), 2),
+    })
 
 
 @app.post("/api/usuarios/vincular")
@@ -607,12 +613,15 @@ def api_chat():
             return jsonify({"erro": "Placa ou PIN incorretos."}), 403
         sessoes = cg.historico_usuario(placa)
         total_pessoal = sum(s["valor"] for s in sessoes)
+        cashback_total = round(sum(s["cashback"] for s in sessoes), 2)
         contexto_extra = (
             f"[GASTO PESSOAL DO MOTORISTA LOGADO — placa {placa.upper()}] "
             f"Total já gasto por esse motorista em {len(sessoes)} sessão(ões): "
             f"R$ {total_pessoal:.2f}. Isso é o gasto individual DESSE motorista, "
             f"diferente do faturamento/receita total do sistema (que soma todos "
-            f"os clientes)."
+            f"os clientes). Cashback acumulado por esse motorista (5% de toda "
+            f"sessão paga, benefício de carregar pela ChargeGrid): R$ {cashback_total:.2f} "
+            f"— é saldo mostrado no app, ainda sem resgate implementado."
         )
 
     try:

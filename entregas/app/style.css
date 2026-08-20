@@ -106,6 +106,28 @@ a { color: var(--cyan); }
 
 .row-botoes { display: flex; gap: 8px; }
 
+.cashback-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.cashback-label {
+  font-size: 12px;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cashback-valor {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
 .add-carro-box {
   background: var(--panel);
   border: 1px solid var(--line-bright);

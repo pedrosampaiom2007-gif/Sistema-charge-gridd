@@ -27,7 +27,7 @@ facilitar o teste da equipe; não são segredo.
 | `XYZ9F88` | Frota Corporativa B | Sessão **ativa** — Estação 2 |
 | `GHI3K45` | Cliente Shopping C | Sessão **ativa** — Estação 3 |
 | `DEF7M01` | Usuário Demo D | Livre, sem sessão no momento |
-| `JKL4M56` | Maria Oliveira | Tem sessão paga no histórico (12h, pico, PIX) |
+| `JKL4M56` | Maria Oliveira | Tem sessão paga no histórico (12h, fora de pico — demanda de almoço, não horário de ponta, PIX) |
 | `NOP7Q89` | João Pereira | Tem sessão paga no histórico (3h, madrugada/desconto, Cartão) |
 | `RST1U23` | Ana Costa | Tem sessão paga no histórico (13h, janela solar/desconto, App) |
 | `VWX5Y67` | Carlos Souza | Tem sessão paga no histórico (19h, pico noturno, QR Code) |

@@ -385,11 +385,16 @@ async function refresh() {
     const roTarifa = document.getElementById("ro-tarifa");
     roTarifa.textContent = `${fmtMoeda(painel.tarifa_kwh_agora)}/kWh`;
     const temDesconto = painel.tarifa_madrugada_ativa || painel.tarifa_solar_ativa;
-    roTarifa.className = `value ${temDesconto ? "cyan" : "amber"}`;
+    // amber só no horário de ponta real (a energia está de fato mais cara);
+    // fora disso, cyan quando há desconto, cor neutra no resto do dia — antes
+    // qualquer hora sem desconto virava amber, mesmo sem ser pico de verdade.
+    roTarifa.className = `value ${temDesconto ? "cyan" : painel.tarifa_pico_ativa ? "amber" : ""}`;
     roTarifa.title = painel.tarifa_madrugada_ativa
       ? "Desconto de madrugada ativo (0h-6h)"
       : painel.tarifa_solar_ativa
       ? "Desconto da janela solar ativo — horário de maior geração fotovoltaica prevista"
+      : painel.tarifa_pico_ativa
+      ? "Horário de ponta da rede (18h-21h) — tarifa mais cara"
       : "";
 
     renderEstacoes(painel.estacoes);

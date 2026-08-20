@@ -116,8 +116,20 @@ MAX_ESTACOES          = 10
 LIMITE_POTENCIA_GRID  = 50.0
 MAX_POTENCIA_ESTACAO  = 22.0
 TARIFA_BASE_KWH       = 0.90
+CASHBACK_PCT          = 0.05   # 5% de volta em toda sessão paga — benefício de carregar pela ChargeGrid
 
 USAR_API_REAL_MERCADOPAGO = False
+
+
+def calcular_cashback(valor_sessao: float) -> float:
+    """Cashback simulado: CASHBACK_PCT do valor de uma sessão PAGA, como
+    benefício de carregar pela ChargeGrid em vez de um ponto avulso sem
+    fidelização. É saldo acumulado e mostrado ao motorista (`historico_usuario`
+    soma isso em cada sessão), não dinheiro sacável — não existe fluxo de
+    resgate ainda, mesma honestidade do resto do sistema em relação a
+    pagamento real (PIX/Cartão/App/QRCode aqui também são só rótulos, sem
+    gateway de verdade por trás)."""
+    return round(valor_sessao * CASHBACK_PCT, 2)
 
 # ─── IA: modelo de previsão de demanda (Kevin / Pedro — 07/07) ────────────────
 # Tenta carregar o modelo treinado com dados reais da planilha SP2.
@@ -690,7 +702,12 @@ def historico_usuario(placa: str) -> list[dict]:
                 campos + " WHERE conta_id IS NULL AND usuario = %s ORDER BY id DESC",
                 (mascarar_id(placa),)
             )
-        return [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+        sessoes = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+        for s in sessoes:
+            # só sessão PAGA rende cashback — pendente ainda não é dinheiro
+            # que entrou de verdade, não faz sentido "devolver" uma parte dele.
+            s["cashback"] = calcular_cashback(s["valor"]) if s["status_pagamento"] == "PAGO" else 0.0
+        return sessoes
 
 
 def obter_potencia_estacoes() -> dict:
@@ -720,6 +737,8 @@ def ia_prever_demanda(hora: int) -> float:
 
 HORA_INICIO_MADRUGADA = 0
 HORA_FIM_MADRUGADA    = 6      # intervalo [0h, 6h) — antes do movimento normal começar
+HORA_INICIO_PICO      = 18
+HORA_FIM_PICO         = 20     # intervalo [18h, 20h] — horário de ponta real da rede (padrão ANEEL)
 DESCONTO_MADRUGADA    = 0.20   # até 20% mais barato que a tarifa base
 DESCONTO_SOLAR        = 0.10   # até 10% mais barato na janela de maior geração solar prevista
 
@@ -728,6 +747,17 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
     """Fator sobre TARIFA_BASE_KWH. Sobe em horário de pico e ocupação/demanda
     alta; desce em dois incentivos diferentes, que nunca se sobrepõem:
 
+    - `pico` (18h-21h, +30%): horário de ponta real da rede elétrica — janela
+      em que a energia efetivamente custa mais caro pra distribuidora, no
+      padrão usado pela maioria das concessionárias brasileiras (ANEEL). Não
+      é o horário em que a ChargeGrid prevê mais gente carregando — isso é
+      papel do fator de `demanda` logo abaixo, que já sobe sozinho quando a
+      previsão de ocupação das estações é alta. Antes, meio-dia (12h) também
+      contava como "pico" só pelo horário de almoço lotar as estações — mas
+      isso é ocupação, não energia mais cara na rede, e como a demanda ao
+      meio-dia já é alta no modelo, a sobretaxa de pico dobrava a cobrança
+      pelo mesmo motivo (12h chegava a ficar mais caro que hora de ponta de
+      verdade). Motivos diferentes, fatores diferentes.
     - madrugada (0h-5h, -20%): achata o pico de demanda da rede — o motivo
       clássico de existir tarifa dinâmica num sistema elétrico.
     - janela solar (-10%, ver solar_optimizer.py): incentiva carregar nas
@@ -735,12 +765,13 @@ def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
       custo, sem chave) — não é geração REAL medida de um inversor (não
       temos um GoodWe conectado pra isso), é o primeiro degrau de reagir a
       previsão solar em vez de só a relógio. Nunca entra em hora de pico
-      (não faria sentido dar desconto justo na hora de maior demanda), nem
-      compete com o desconto de madrugada (geração solar à noite é zero, a
-      janela nunca cai lá de qualquer forma — o elif é só documentação
-      dessa garantia, não uma correção de um caso real observado)."""
+      (não faria sentido dar desconto justo na hora em que a energia da rede
+      está mais cara), nem compete com o desconto de madrugada (geração
+      solar à noite é zero, a janela nunca cai lá de qualquer forma — o elif
+      é só documentação dessa garantia, não uma correção de um caso real
+      observado)."""
     fator = 1.0
-    pico = hora == 12 or 18 <= hora <= 20
+    pico = HORA_INICIO_PICO <= hora <= HORA_FIM_PICO  # ponta real (rede), não previsão de demanda
     if pico:
         fator += 0.30
     if estacoes_ativas >= 3:

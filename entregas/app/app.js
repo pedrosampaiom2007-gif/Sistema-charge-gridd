@@ -113,6 +113,7 @@ async function atualizarHistorico() {
     // a tela simplesmente parava de atualizar sem dizer nada.
     if (!res.ok) { showToast(data.erro || "Não foi possível atualizar agora."); return; }
     renderHistorico(data.sessoes);
+    document.getElementById("cashback-total").textContent = fmtMoeda(data.cashback_total || 0);
   } catch (err) {
     showToast("Sem conexão com o servidor.");
   } finally {
@@ -144,6 +145,7 @@ function renderHistorico(sessoes) {
       <div class="linha"><span class="k">Consumo</span><span class="v">${s.kwh.toFixed(2)} kWh</span></div>
       <div class="linha"><span class="k">Valor</span><span class="v">${fmtMoeda(s.valor)}</span></div>
       <div class="linha"><span class="k">Pagamento</span><span class="v ${s.status_pagamento === "PAGO" ? "pago" : "pendente"}">${s.pagamento} · ${s.status_pagamento}</span></div>
+      ${s.cashback > 0 ? `<div class="linha"><span class="k">Cashback</span><span class="v cyan">+ ${fmtMoeda(s.cashback)}</span></div>` : ""}
     </div>
   `).join("");
 }

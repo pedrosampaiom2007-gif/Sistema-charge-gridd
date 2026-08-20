@@ -67,9 +67,11 @@ class TestTarifacaoDinamica(unittest.TestCase):
         with patch.object(cg, "ia_prever_demanda", return_value=0.5):
             self.assertEqual(cg.ia_calcular_tarifa(hora=10, estacoes_ativas=1), 1.0)
 
-    def test_horario_de_almoco_adiciona_30_por_cento(self):
+    def test_horario_de_almoco_nao_e_mais_pico(self):
+        # 12h não é horário de ponta real da rede — só tinha demanda alta nas
+        # estações, e isso já é coberto por ia_prever_demanda, não pelo pico.
         with patch.object(cg, "ia_prever_demanda", return_value=0.5):
-            self.assertEqual(cg.ia_calcular_tarifa(hora=12, estacoes_ativas=1), 1.30)
+            self.assertEqual(cg.ia_calcular_tarifa(hora=12, estacoes_ativas=1), 1.0)
 
     def test_horario_pico_noturno_adiciona_30_por_cento(self):
         with patch.object(cg, "ia_prever_demanda", return_value=0.5):
@@ -110,6 +112,22 @@ class TestTarifacaoDinamica(unittest.TestCase):
             self.assertGreaterEqual(fator, 0.80)
 
 
+class TestCashback(unittest.TestCase):
+    """calcular_cashback é função pura — a parte que depende do Postgres
+    (marcar cashback só em sessão PAGA dentro de historico_usuario) é
+    verificada manualmente contra a API real, mesmo padrão do resto do
+    projeto pra tudo que toca o banco compartilhado."""
+
+    def test_cashback_e_5_por_cento_do_valor(self):
+        self.assertEqual(cg.calcular_cashback(100.0), 5.0)
+
+    def test_cashback_arredonda_pra_duas_casas(self):
+        self.assertEqual(cg.calcular_cashback(33.33), 1.67)
+
+    def test_cashback_de_zero_e_zero(self):
+        self.assertEqual(cg.calcular_cashback(0.0), 0.0)
+
+
 class TestDescontoSolar(unittest.TestCase):
     """O desconto solar depende de solar_optimizer.esta_em_janela_solar, que
     é mockado diretamente aqui — não testa a busca de dados em si (isso é
@@ -126,12 +144,21 @@ class TestDescontoSolar(unittest.TestCase):
             self.assertEqual(cg.ia_calcular_tarifa(hora=10, estacoes_ativas=1), 1.0)
 
     def test_pico_tem_prioridade_sobre_janela_solar(self):
-        # hora 12 é pico de almoço — mesmo que o mock diga que é janela
-        # solar, não faria sentido dar desconto justo na hora de maior
-        # demanda, então o pico vence.
+        # 19h é horário de ponta real — mesmo que o mock diga que é janela
+        # solar (cenário artificial: geração solar real não existe às 19h),
+        # não faria sentido dar desconto justo na hora em que a energia da
+        # rede está mais cara, então o pico vence.
         with patch.object(cg, "ia_prever_demanda", return_value=0.5), \
              patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
-            self.assertEqual(cg.ia_calcular_tarifa(hora=12, estacoes_ativas=1), 1.30)
+            self.assertEqual(cg.ia_calcular_tarifa(hora=19, estacoes_ativas=1), 1.30)
+
+    def test_meio_dia_agora_pode_receber_desconto_solar(self):
+        # Efeito direto da correção: 12h deixou de ser "pico" artificial, e a
+        # janela solar de fato passa pelo meio-dia (é quando o sol está mais
+        # alto) — antes disso nunca acontecia, porque o pico bloqueava.
+        with patch.object(cg, "ia_prever_demanda", return_value=0.5), \
+             patch.object(cg.solar_optimizer, "esta_em_janela_solar", return_value=True):
+            self.assertEqual(cg.ia_calcular_tarifa(hora=12, estacoes_ativas=1), 0.90)
 
     def test_madrugada_tem_prioridade_sobre_janela_solar(self):
         # cenário artificial (geração solar real é zero de madrugada), só

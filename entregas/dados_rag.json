@@ -259,6 +259,7 @@
     "Consumo médio por sessão: 24.34 kWh. Duração média: 2.58h. Tarifa média: R$ 1.85/kWh.",
     "DLB Ativo reduz variância do consumo: com DLB Ativo a variância é 273.1, com DLB Inativo é 496.1. DLB Ativo garante estabilidade da rede.",
     "Custo de instalação médio por ponto de carga: R$ 15.000. Para 50 veículos/dia, recomenda-se ao menos 3 carregadores de 22 kW.",
-    "Cobrança feita por kWh consumido com tarifa dinâmica: R$ 0,90/kWh base, ajustada por horário de pico (+30%) e ocupação alta (+15%)."
+    "Cobrança feita por kWh consumido com tarifa dinâmica: R$ 0,90/kWh base, ajustada por horário de ponta real da rede (18h-21h, +30%) e ocupação alta (+15%) — a hora do dia com mais gente carregando entra pelo fator de demanda prevista, não pelo pico.",
+    "Cashback: todo motorista recebe 5% de volta do valor de cada sessão PAGA carregando pela ChargeGrid, mostrado como saldo acumulado em 'Meus pagamentos' no app. Ainda não tem resgate — é o benefício de usar a plataforma, não um cartão de crédito com saque."
   ]
 }

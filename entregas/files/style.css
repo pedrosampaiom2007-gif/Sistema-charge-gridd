@@ -332,6 +332,7 @@ p.sub {
   min-height: 18px;
 }
 .tarifa-nota.desconto { color: var(--cyan); }
+.tarifa-nota.pico { color: var(--amber); }
 
 .config-hint {
   position: absolute;
