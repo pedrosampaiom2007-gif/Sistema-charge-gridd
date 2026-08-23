@@ -224,7 +224,7 @@ def painel():
         "tarifa_madrugada_ativa": cg.HORA_INICIO_MADRUGADA <= hora_atual < cg.HORA_FIM_MADRUGADA,
         "tarifa_solar_ativa": solar.esta_em_janela_solar(hora_atual),
         "tarifa_pico_ativa": cg.HORA_INICIO_PICO <= hora_atual <= cg.HORA_FIM_PICO,
-        "atualizado_em": datetime.datetime.now().isoformat(),
+        "atualizado_em": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     })
 
 
@@ -322,7 +322,14 @@ def api_iniciar_sessao():
     e.ativa = True
     e.metodo_pagamento = pagamento
     e.id_sessao_db = id_gerado_db
-    _INICIO_REAL[idx + 1] = datetime.datetime.now().isoformat()
+    # now(UTC), não now() puro: o servidor (Render) roda em UTC, o navegador
+    # do motorista roda no fuso local (Brasil, UTC-3). new Date("...") no JS
+    # trata uma string SEM offset como horário local do navegador — então um
+    # timestamp UTC sem essa marcação virava "daqui a 3h" na conta do totem,
+    # e o cronômetro (Date.now() - inicioRealAtual) nascia negativo:
+    # -180 minutos, os 3 fusos de diferença. Com o offset explícito (+00:00),
+    # o navegador converte certo não importa o fuso de cada lado.
+    _INICIO_REAL[idx + 1] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     cg.ocpp_enviar("StartTransaction", e.id_estacao, {"status": "Connected", "usuario": uid_mascarado})
     cg.balancear_carga()

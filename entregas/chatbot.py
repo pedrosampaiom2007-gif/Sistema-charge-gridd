@@ -39,7 +39,12 @@ with open(os.path.join(PASTA_ATUAL, "dados_rag.json"), "r", encoding="utf-8") as
 
 documentos = dados_rag["frases_contexto_rag"]
 
-MODELO = "llama-3.1-8b-instant"
+# llama-3.1-8b-instant saiu do catálogo do Groq (a API passou a devolver
+# 404 "model_not_found" pra ele) — trocado pelo openai/gpt-oss-20b, que é o
+# mais parecido em proposta (rápido, pequeno) entre os modelos que a conta
+# tem acesso hoje. Confira periodicamente com GET /openai/v1/models — Groq
+# roda vários modelos como "preview" e pode aposentar/trocar sem aviso.
+MODELO = "openai/gpt-oss-20b"
 
 # O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
 # Antes ele era criado no import, lendo os.environ["GROQ_API_KEY"] direto: se
