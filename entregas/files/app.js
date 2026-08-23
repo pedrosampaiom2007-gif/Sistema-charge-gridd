@@ -20,7 +20,15 @@ document.getElementById("station-tag-text").textContent = `Estação ${String(ES
 let metodoSelecionado = "PIX";
 let pollTimer = null;
 let liveTickTimer = null;
-let inicioRealAtual = null;
+// Cronômetro em duas partes: baseSegundos vem PRONTO do servidor (calculado
+// com o relógio dele, contra ele mesmo) a cada poll; baseTimestampLocal só
+// mede o intervalinho (até 3s) até o próximo poll, com o relógio local. Não
+// comparamos mais um timestamp do servidor com Date.now() do navegador —
+// isso comparava dois relógios de máquinas diferentes, que nunca batem no
+// segundo exato (mesmo com fuso certo, sobrava alguns segundos de diferença).
+let cronometroAtivo = false;
+let baseSegundos = 0;
+let baseTimestampLocal = 0;
 let telaAtual = "livre";
 let modoCadastro = false; // true = placa não reconhecida, esperando nome pra cadastrar
 
@@ -143,7 +151,7 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
       return;
     }
 
-    inicioRealAtual = Date.now();
+    definirTempoDecorrido(0);
     iniciarLiveTick();
     irPara("carregando");
     atualizarSessaoAoVivo();
@@ -159,10 +167,19 @@ document.getElementById("btn-confirmar-placa").addEventListener("click", async (
 function iniciarLiveTick() {
   clearInterval(liveTickTimer);
   liveTickTimer = setInterval(() => {
-    if (!inicioRealAtual) return;
-    const decorridos = (Date.now() - inicioRealAtual) / 1000;
+    if (!cronometroAtivo) return;
+    const decorridos = baseSegundos + (Date.now() - baseTimestampLocal) / 1000;
     document.getElementById("live-tempo").textContent = fmtTempo(decorridos);
   }, 1000);
+}
+
+// baseSegundos vem pronto do servidor (calculado com o relógio dele, contra
+// ele mesmo); baseTimestampLocal só marca "agora, pelo relógio local" pra
+// medir os poucos segundos até o próximo poll corrigir de novo.
+function definirTempoDecorrido(segundos) {
+  baseSegundos = segundos;
+  baseTimestampLocal = Date.now();
+  cronometroAtivo = true;
 }
 
 // ─── Tarifa atual (mostrada na tela livre, antes do motorista decidir carregar) ─
@@ -226,7 +243,7 @@ async function atualizarSessaoAoVivo() {
       document.getElementById("live-potencia").innerHTML = `${e.potencia_kw.toFixed(1)}<span class="unit">kW</span>`;
       document.getElementById("live-kwh").innerHTML = `${e.kwh_consumidos.toFixed(2)}<span class="unit">kWh</span>`;
       document.getElementById("live-valor").textContent = fmtMoeda(e.valor_sessao);
-      if (e.iniciado_em_real) inicioRealAtual = new Date(e.iniciado_em_real).getTime();
+      if (e.segundos_decorridos != null) definirTempoDecorrido(e.segundos_decorridos);
 
       if (telaAtual === "livre") {
         // totem foi recarregado com a sessão já em andamento (ex: outro cliente)
@@ -287,7 +304,7 @@ function mostrarRecibo(recibo) {
 document.getElementById("btn-concluir").addEventListener("click", resetarParaLivre);
 
 function resetarParaLivre() {
-  inicioRealAtual = null;
+  cronometroAtivo = false;
   clearInterval(liveTickTimer);
   irPara("livre");
 }

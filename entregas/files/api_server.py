@@ -165,7 +165,7 @@ def painel():
     tem uma leitura oficial é 'hora_inicio' — lido direto do objeto em
     memória, sinalizado abaixo, até existir uma função pra isso também.
     """
-    hora_atual = datetime.datetime.now().hour
+    hora_atual = cg.hora_atual_brasil()
 
     # Uma consulta só ao banco: antes, obter_status_estacoes() chamava
     # listar_sessoes_ativas() por dentro e a linha de baixo chamava de novo —
@@ -182,10 +182,27 @@ def painel():
 
     fator_tarifa = cg.ia_calcular_tarifa(hora_atual, cg.contar_ativas())
 
+    agora_utc = datetime.datetime.now(datetime.timezone.utc)
+
     estacoes_out = []
     for n in range(1, cg.MAX_ESTACOES + 1):
         info = sessoes_ativas.get(n)
         ativa = status_por_estacao[n] == "Ocupada"
+
+        # Segundos decorridos calculados AQUI, com o relógio do servidor —
+        # não mandamos mais um timestamp pro navegador comparar com o
+        # relógio dele: por mais que os dois relógios estejam no fuso
+        # certo, eles nunca batem no segundo exato entre duas máquinas
+        # diferentes (Render vs. o computador de cada um), e isso já foi
+        # relatado como alguns segundos de diferença no cronômetro do
+        # totem mesmo depois de corrigido o bug de fuso horário. Contando
+        # só com o relógio do servidor, o resultado é o mesmo não importa
+        # de qual máquina o totem seja acessado.
+        segundos_decorridos = None
+        if ativa and _INICIO_REAL.get(n):
+            inicio_dt = datetime.datetime.fromisoformat(_INICIO_REAL[n])
+            segundos_decorridos = round((agora_utc - inicio_dt).total_seconds(), 1)
+
         estacoes_out.append({
             "estacao": n,
             "status": status_por_estacao[n],
@@ -196,7 +213,7 @@ def painel():
             "metodo_pagamento": info["pagamento"] if info else "---",
             # ainda não coberto por uma função de leitura oficial:
             "hora_inicio": cg.estacoes[n - 1].hora_inicio if ativa else 0,
-            "iniciado_em_real": _INICIO_REAL.get(n) if ativa else None,
+            "segundos_decorridos": segundos_decorridos,
             "motivo_manutencao": em_manutencao.get(n, {}).get("motivo") if status_por_estacao[n] == "Manutenção" else None,
             # None = nenhum sensor físico reportou ainda pra essa estação
             # (é o caso de hoje, sem hardware conectado — ver TAREFAS_EQUIPE.md)
@@ -281,7 +298,7 @@ def api_iniciar_sessao():
     dados = request.get_json(force=True) or {}
     idx = int(dados.get("estacao", 0)) - 1
     uid = (dados.get("usuario") or "ANONIMO").strip().upper()
-    hora = dados.get("hora", datetime.datetime.now().hour)
+    hora = dados.get("hora", cg.hora_atual_brasil())
     pagamento = dados.get("pagamento") or "App"
 
     if not (0 <= idx < cg.MAX_ESTACOES):
@@ -296,9 +313,9 @@ def api_iniciar_sessao():
     try:
         hora = int(hora)
         if not (0 <= hora <= 23):
-            hora = datetime.datetime.now().hour
+            hora = cg.hora_atual_brasil()
     except (TypeError, ValueError):
-        hora = datetime.datetime.now().hour
+        hora = cg.hora_atual_brasil()
 
     uid_mascarado = cg.mascarar_id(uid)
     data_hoje = datetime.date.today().isoformat()
@@ -322,13 +339,11 @@ def api_iniciar_sessao():
     e.ativa = True
     e.metodo_pagamento = pagamento
     e.id_sessao_db = id_gerado_db
-    # now(UTC), não now() puro: o servidor (Render) roda em UTC, o navegador
-    # do motorista roda no fuso local (Brasil, UTC-3). new Date("...") no JS
-    # trata uma string SEM offset como horário local do navegador — então um
-    # timestamp UTC sem essa marcação virava "daqui a 3h" na conta do totem,
-    # e o cronômetro (Date.now() - inicioRealAtual) nascia negativo:
-    # -180 minutos, os 3 fusos de diferença. Com o offset explícito (+00:00),
-    # o navegador converte certo não importa o fuso de cada lado.
+    # now(UTC), não now() puro: o servidor (Render) roda em UTC. Guardado só
+    # como referência interna pra calcular segundos_decorridos em painel()
+    # (o front não recebe mais este timestamp cru — ver comentário lá sobre
+    # por que o cronômetro do totem foi trocado pra não comparar relógio de
+    # máquinas diferentes).
     _INICIO_REAL[idx + 1] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     cg.ocpp_enviar("StartTransaction", e.id_estacao, {"status": "Connected", "usuario": uid_mascarado})

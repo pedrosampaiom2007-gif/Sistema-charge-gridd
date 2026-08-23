@@ -742,6 +742,21 @@ HORA_FIM_PICO         = 20     # intervalo [18h, 20h] — horário de ponta real
 DESCONTO_MADRUGADA    = 0.20   # até 20% mais barato que a tarifa base
 DESCONTO_SOLAR        = 0.10   # até 10% mais barato na janela de maior geração solar prevista
 
+# Fuso fixo, não zoneinfo/pytz: o Brasil aboliu o horário de verão em 2019,
+# então UTC-3 é o horário civil de Brasília o ano inteiro, sem exceção
+# sazonal — não precisa de banco de dados de fuso horário pra isso.
+FUSO_BRASIL = datetime.timezone(datetime.timedelta(hours=-3))
+
+
+def hora_atual_brasil() -> int:
+    """Hora corrente (0-23) no fuso de Brasília — NÃO usar datetime.now().hour
+    puro pra isso: aquilo pega o fuso do sistema operacional onde o processo
+    roda, que localmente é Brasil mas em produção (Render) é UTC. Isso fazia
+    a janela de pico/madrugada acionar 3h mais cedo que o horário real de
+    Brasília assim que o sistema foi publicado — mesma causa raiz do bug do
+    cronômetro do totem, seção "Deploy" do README tem mais contexto."""
+    return datetime.datetime.now(FUSO_BRASIL).hour
+
 
 def ia_calcular_tarifa(hora: int, estacoes_ativas: int) -> float:
     """Fator sobre TARIFA_BASE_KWH. Sobe em horário de pico e ocupação/demanda
@@ -900,9 +915,9 @@ def iniciar_sessao() -> None:
     print("Horário de início (0–23): ", end="")
     try:
         hora = int(input())
-        hora = hora if 0 <= hora <= 23 else datetime.datetime.now().hour
+        hora = hora if 0 <= hora <= 23 else hora_atual_brasil()
     except ValueError:
-        hora = datetime.datetime.now().hour
+        hora = hora_atual_brasil()
 
     print("Método de pagamento (PIX / Cartao / App / QRCode): ", end="")
     pagamento = input().strip() or "App"
@@ -993,7 +1008,7 @@ def encerrar_sessao() -> None:
 # ─── Painel operacional ───────────────────────────────────────────────────────
 def painel_operacional() -> None:
     n = contar_ativas()
-    hora_atual    = datetime.datetime.now().hour
+    hora_atual    = hora_atual_brasil()
     demanda_agora = ia_prever_demanda(hora_atual)
 
     print(f"\n{'='*65}")
