@@ -1,1 +1,14 @@
-web: gunicorn --bind 0.0.0.0:$PORT api_server:app
+# --workers 1: o estado ao vivo (potencia_kw, sessões em memória, tokens de
+# admin, o loop de simulação) só existe dentro de UM processo Python — mais
+# de 1 worker faria cada processo enxergar um "sistema" diferente (ver
+# comentários de _TOKENS_ADMIN_VALIDOS e do rate limiter em api_server.py).
+# --threads 4 --worker-class gthread: sem isso, o worker sync padrão do
+# gunicorn só atende UMA requisição HTTP por vez — com 3 telas (totem, app,
+# dashboard) fazendo polling a cada 3-4s, e o /api/chat esperando a resposta
+# de uma LLM (pode levar vários segundos), qualquer uma dessas chamadas
+# lentas travava as outras (medido: uma rota de 3s segurava uma rota
+# instantânea por quase os mesmos 3s). Threads liberam o GIL durante I/O de
+# rede/banco, então dá pra atender várias ao mesmo tempo sem duplicar o
+# processo — e 4 casa com o teto do pool de conexões (ThreadedConnectionPool
+# 1-5, ver ev_chargegrid.py).
+web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --worker-class gthread api_server:app

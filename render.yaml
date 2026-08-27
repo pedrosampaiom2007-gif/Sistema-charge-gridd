@@ -7,7 +7,12 @@ services:
     plan: free
     rootDir: entregas/files
     buildCommand: pip install -r "../requirements (1).txt"
-    startCommand: gunicorn --bind 0.0.0.0:$PORT api_server:app
+    # --workers 1 (estado ao vivo mora na memória de UM processo só, ver
+    # Procfile) + --threads 4 --worker-class gthread (sem isso, o worker sync
+    # padrão só atende 1 requisição HTTP por vez — com 3 telas fazendo
+    # polling e o /api/chat esperando a LLM, uma chamada lenta travava as
+    # demais; medido localmente antes desta mudança).
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --worker-class gthread api_server:app
     envVars:
       - key: DATABASE_URL
         sync: false
