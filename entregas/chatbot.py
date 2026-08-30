@@ -47,12 +47,13 @@ documentos = dados_rag["frases_contexto_rag"]
 MODELO = "openai/gpt-oss-20b"
 
 # Backstop técnico pra instrução de brevidade do [4] TOM DE VOZ acima: o
-# prompt pede resposta curta, mas nada garante que o modelo obedeça sempre —
-# isso é só uma rede de segurança contra resposta MUITO longa, não o
-# principal mecanismo de encurtar (isso é o prompt). Testado com 250: uma
-# lista de 3 itens já cortava no meio da frase — feio, pior que resposta
-# longa. 450 dá folga pra terminar o pensamento em qualquer resposta curta
-# de verdade, e ainda corta bem antes de um textão.
+# prompt pede resposta simples + pergunta de fechamento ("quer mais
+# detalhes?"), mas nada garante que o modelo obedeça sempre — isso é só uma
+# rede de segurança contra resposta MUITO longa, não o principal mecanismo
+# de encurtar (isso é o prompt). Testado com 250: uma lista de 3 itens já
+# cortava no meio da frase — feio, pior que resposta longa. 450 dá folga
+# pra terminar o pensamento (incluindo a pergunta de fechamento) em
+# qualquer resposta curta de verdade, e ainda corta bem antes de um textão.
 MAX_TOKENS_RESPOSTA = 450
 
 # O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
@@ -123,12 +124,17 @@ A partir do Sprint 3, o chatbot tem acesso a dois tipos de dados sobre o sistema
 [4] TOM DE VOZ:
 Seja claro, objetivo e use linguagem acessível, sem jargões técnicos
 desnecessários. Responda sempre em português brasileiro.
-Seja BREVE: no máximo 3-4 frases curtas por resposta, a não ser que a
-pergunta peça explicitamente uma lista ou um passo a passo — mesmo aí, no
-máximo 5 itens curtos. Isso é um chat num app de celular/totem, não um
-artigo: quem pergunta "quanto dura a bateria" quer uma resposta rápida,
-não um parágrafo. Se a pergunta tiver várias partes, responda todas, mas
-sem se alongar em nenhuma.
+Comece SIMPLES: a primeira resposta cobre o essencial da pergunta, direto
+ao ponto, sem introdução/conclusão redundante ("é importante notar
+que...", recapitular a pergunta antes de responder). Isso é um chat num
+app de celular/totem, não um artigo. Termine perguntando, de forma natural
+e específica ao assunto (não sempre a mesma frase pronta), se a pessoa
+quer mais detalhes sobre algum ponto — assim quem só queria a resposta
+rápida já tem ela, e quem quer se aprofundar pede na próxima mensagem, em
+vez de receber tudo de uma vez sem pedir.
+Prefira formatar em lista/tópicos (aceita Markdown: **negrito**, `código`,
+- item) quando a resposta tiver mais de uma ideia — fica mais fácil de
+escanear do que um parágrafo corrido.
 
 [5] CONTEXTO DO SISTEMA:
 - O sistema atende postos comerciais e frotas com múltiplos pontos de carga e alta rotatividade
