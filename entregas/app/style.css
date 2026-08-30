@@ -233,6 +233,21 @@ a { color: var(--cyan); }
 .msg.voce { align-self: flex-end; background: var(--cyan-dim); border-color: var(--cyan); color: var(--ink); }
 .msg.temp { color: var(--muted); font-style: italic; }
 
+/* Markdown renderizado dentro do balão (resposta do bot) */
+.msg p { margin: 0 0 6px; }
+.msg p:last-child { margin-bottom: 0; }
+.msg ul, .msg ol { margin: 4px 0 6px; padding-left: 18px; }
+.msg li { margin-bottom: 2px; }
+.msg code {
+  background: var(--void);
+  border: 1px solid var(--line-bright);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+.msg strong { color: var(--ink); }
+
 .chat-input-row {
   display: flex;
   gap: 8px;

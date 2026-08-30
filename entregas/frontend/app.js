@@ -208,6 +208,19 @@ function renderEstacoes(estacoes) {
   });
 }
 
+// ─── Rótulos de hora no eixo X (0h, 6h, 12h, 18h, 23h) ─────────────────────────
+// text-anchor="middle" nas pontas (0h e 23h) fazia metade do texto vazar pra
+// fora da área do gráfico — em x=0 (padL) sobra pouca margem à esquerda, e em
+// x=plotW (W-padR) sobra só 10px à direita, menos que a metade da largura de
+// "23h". A correção: ancorar pelo início/fim nas pontas, não pelo centro —
+// aí o texto cresce PRA DENTRO da área do gráfico em vez de pros dois lados.
+function hourLabelsSVG(horas, calcularX, H) {
+  return horas.map((h, i) => {
+    const anchor = i === 0 ? "start" : i === horas.length - 1 ? "end" : "middle";
+    return `<text x="${calcularX(h)}" y="${H - 4}" fill="var(--muted-dim)" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="${anchor}">${h}h</text>`;
+  }).join("");
+}
+
 // ─── Tooltip interativo (hover mostra hora + valor exato) ──────────────────────
 // Um listener por gráfico, montado uma vez só — em vez de recriar a cada
 // render (o poll roda a cada 4s, e isso vazaria um listener novo por poll).
@@ -260,11 +273,7 @@ function renderDemandChart(curva, horaAtual) {
     gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
   }
 
-  let hourLabels = "";
-  [0, 6, 12, 18, 23].forEach((h) => {
-    const x = padL + (h / (curva.length - 1)) * plotW;
-    hourLabels += `<text x="${x}" y="${H - 4}" fill="var(--muted-dim)" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="middle">${h}h</text>`;
-  });
+  const hourLabels = hourLabelsSVG([0, 6, 12, 18, 23], (h) => padL + (h / (curva.length - 1)) * plotW, H);
 
   const nowX = padL + (horaAtual / (curva.length - 1)) * plotW;
 
@@ -311,11 +320,7 @@ function renderSolarChart(curva, horaAtual, fonte) {
     gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
   }
 
-  let hourLabels = "";
-  [0, 6, 12, 18, 23].forEach((h) => {
-    const x = padL + h * passo;
-    hourLabels += `<text x="${x}" y="${H - 4}" fill="var(--muted-dim)" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="middle">${h}h</text>`;
-  });
+  const hourLabels = hourLabelsSVG([0, 6, 12, 18, 23], (h) => padL + h * passo, H);
 
   // Faixa da janela solar: pode ser descontínua (nuvem passageira desloca a
   // previsão), então desenha um retângulo por hora marcada em vez de assumir
@@ -558,11 +563,58 @@ function fecharPainelIA() {
   document.getElementById("ia-panel").setAttribute("aria-hidden", "true");
 }
 
+// Escapa HTML antes de qualquer coisa: o texto vem de um modelo de IA, nunca
+// deve virar HTML/script executável no navegador de quem só está perguntando
+// sobre faturamento ou disponibilidade de estação.
+function escaparHTML(texto) {
+  const div = document.createElement("div");
+  div.textContent = texto;
+  return div.innerHTML;
+}
+
+// Markdown básico (negrito, itálico, código inline, listas) — o Groq
+// devolve as respostas formatadas assim, e sem isso o balão do chat mostrava
+// os asteriscos/traços literais em vez do texto formatado.
+function renderizarMarkdown(texto) {
+  let html = escaparHTML(texto);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  html = html.replace(/(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g, "<em>$1</em>");
+
+  // Agrupa linhas "- item" / "1. item" consecutivas num <ul>/<ol>; o resto
+  // vira parágrafo, pra respeitar as quebras de linha que o modelo manda.
+  const saida = [];
+  let listaAtual = null;
+  for (const linha of html.split("\n")) {
+    const itemUl = linha.match(/^[-*]\s+(.+)/);
+    const itemOl = linha.match(/^\d+\.\s+(.+)/);
+    const tipo = itemUl ? "ul" : itemOl ? "ol" : null;
+    if (tipo) {
+      if (listaAtual !== tipo) {
+        if (listaAtual) saida.push(`</${listaAtual}>`);
+        saida.push(`<${tipo}>`);
+        listaAtual = tipo;
+      }
+      saida.push(`<li>${(itemUl || itemOl)[1]}</li>`);
+    } else {
+      if (listaAtual) { saida.push(`</${listaAtual}>`); listaAtual = null; }
+      if (linha.trim()) saida.push(`<p>${linha}</p>`);
+    }
+  }
+  if (listaAtual) saida.push(`</${listaAtual}>`);
+  return saida.join("");
+}
+
 function adicionarMensagemIA(quem, texto, temporaria = false) {
   const box = document.getElementById("ia-chat-mensagens");
   const div = document.createElement("div");
   div.className = `msg ${quem}` + (temporaria ? " temp" : "");
-  div.textContent = texto;
+  // Só a resposta do bot passa pelo Markdown — a pergunta é texto puro do
+  // usuário, não tem por quê (nem deveria) virar HTML.
+  if (quem === "bot") div.innerHTML = renderizarMarkdown(texto);
+  else div.textContent = texto;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
   return div;

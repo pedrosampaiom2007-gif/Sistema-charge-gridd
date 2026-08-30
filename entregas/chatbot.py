@@ -46,6 +46,15 @@ documentos = dados_rag["frases_contexto_rag"]
 # roda vários modelos como "preview" e pode aposentar/trocar sem aviso.
 MODELO = "openai/gpt-oss-20b"
 
+# Backstop técnico pra instrução de brevidade do [4] TOM DE VOZ acima: o
+# prompt pede resposta curta, mas nada garante que o modelo obedeça sempre —
+# isso é só uma rede de segurança contra resposta MUITO longa, não o
+# principal mecanismo de encurtar (isso é o prompt). Testado com 250: uma
+# lista de 3 itens já cortava no meio da frase — feio, pior que resposta
+# longa. 450 dá folga pra terminar o pensamento em qualquer resposta curta
+# de verdade, e ainda corta bem antes de um textão.
+MAX_TOKENS_RESPOSTA = 450
+
 # O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
 # Antes ele era criado no import, lendo os.environ["GROQ_API_KEY"] direto: se
 # a chave não estivesse configurada (chave rotacionada, deploy novo em que
@@ -114,6 +123,12 @@ A partir do Sprint 3, o chatbot tem acesso a dois tipos de dados sobre o sistema
 [4] TOM DE VOZ:
 Seja claro, objetivo e use linguagem acessível, sem jargões técnicos
 desnecessários. Responda sempre em português brasileiro.
+Seja BREVE: no máximo 3-4 frases curtas por resposta, a não ser que a
+pergunta peça explicitamente uma lista ou um passo a passo — mesmo aí, no
+máximo 5 itens curtos. Isso é um chat num app de celular/totem, não um
+artigo: quem pergunta "quanto dura a bateria" quer uma resposta rápida,
+não um parágrafo. Se a pergunta tiver várias partes, responda todas, mas
+sem se alongar em nenhuma.
 
 [5] CONTEXTO DO SISTEMA:
 - O sistema atende postos comerciais e frotas com múltiplos pontos de carga e alta rotatividade
@@ -269,7 +284,7 @@ def chat(pergunta: str) -> str:
     else:
         mensagem = pergunta
     historico.append({"role": "user", "content": mensagem})
-    resposta = obter_client().chat.completions.create(model=MODELO, messages=historico)
+    resposta = obter_client().chat.completions.create(model=MODELO, messages=historico, max_tokens=MAX_TOKENS_RESPOSTA)
     conteudo = resposta.choices[0].message.content
     historico.append({"role": "assistant", "content": conteudo})
     return conteudo
@@ -298,6 +313,7 @@ def responder(pergunta: str, contexto_extra: str = None, acesso_gestao: bool = F
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": mensagem},
         ],
+        max_tokens=MAX_TOKENS_RESPOSTA,
     )
     return resposta.choices[0].message.content
 

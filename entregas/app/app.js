@@ -195,11 +195,57 @@ async function confirmarAddCarro() {
 }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
+// Escapa HTML antes de qualquer coisa: o texto vem de um modelo de IA, nunca
+// deve virar HTML/script executável no navegador do motorista.
+function escaparHTML(texto) {
+  const div = document.createElement("div");
+  div.textContent = texto;
+  return div.innerHTML;
+}
+
+// Markdown básico (negrito, itálico, código inline, listas) — o Groq
+// devolve as respostas formatadas assim, e sem isso o balão do chat mostrava
+// os asteriscos/traços literais em vez do texto formatado.
+function renderizarMarkdown(texto) {
+  let html = escaparHTML(texto);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  html = html.replace(/(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g, "<em>$1</em>");
+
+  // Agrupa linhas "- item" / "1. item" consecutivas num <ul>/<ol>; o resto
+  // vira parágrafo, pra respeitar as quebras de linha que o modelo manda.
+  const saida = [];
+  let listaAtual = null;
+  for (const linha of html.split("\n")) {
+    const itemUl = linha.match(/^[-*]\s+(.+)/);
+    const itemOl = linha.match(/^\d+\.\s+(.+)/);
+    const tipo = itemUl ? "ul" : itemOl ? "ol" : null;
+    if (tipo) {
+      if (listaAtual !== tipo) {
+        if (listaAtual) saida.push(`</${listaAtual}>`);
+        saida.push(`<${tipo}>`);
+        listaAtual = tipo;
+      }
+      saida.push(`<li>${(itemUl || itemOl)[1]}</li>`);
+    } else {
+      if (listaAtual) { saida.push(`</${listaAtual}>`); listaAtual = null; }
+      if (linha.trim()) saida.push(`<p>${linha}</p>`);
+    }
+  }
+  if (listaAtual) saida.push(`</${listaAtual}>`);
+  return saida.join("");
+}
+
 function adicionarMensagem(quem, texto, temporaria = false) {
   const box = document.getElementById("chat-mensagens");
   const div = document.createElement("div");
   div.className = `msg ${quem}` + (temporaria ? " temp" : "");
-  div.textContent = texto;
+  // Só a resposta do bot passa pelo Markdown — a pergunta é texto puro do
+  // usuário, não tem por quê (nem deveria) virar HTML.
+  if (quem === "bot") div.innerHTML = renderizarMarkdown(texto);
+  else div.textContent = texto;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
   return div;

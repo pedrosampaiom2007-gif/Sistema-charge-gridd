@@ -556,6 +556,21 @@ footer.hint {
 .ia-panel .msg.voce { align-self: flex-end; background: var(--cyan-dim); border-color: var(--cyan); color: var(--ink); }
 .ia-panel .msg.temp { color: var(--muted); font-style: italic; }
 
+/* Markdown renderizado dentro do balão (resposta do bot) */
+.ia-panel .msg p { margin: 0 0 6px; }
+.ia-panel .msg p:last-child { margin-bottom: 0; }
+.ia-panel .msg ul, .ia-panel .msg ol { margin: 4px 0 6px; padding-left: 18px; }
+.ia-panel .msg li { margin-bottom: 2px; }
+.ia-panel .msg code {
+  background: var(--void);
+  border: 1px solid var(--line-bright);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+.ia-panel .msg strong { color: var(--ink); }
+
 .ia-panel .chat-input-row {
   display: flex;
   gap: 8px;
