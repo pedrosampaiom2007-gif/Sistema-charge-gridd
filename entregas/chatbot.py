@@ -14,6 +14,7 @@ Como rodar:
 
 import os
 import json
+import re
 import unicodedata
 from groq import Groq
 from dotenv import load_dotenv
@@ -55,6 +56,16 @@ MODELO = "openai/gpt-oss-20b"
 # pra terminar o pensamento (incluindo a pergunta de fechamento) em
 # qualquer resposta curta de verdade, e ainda corta bem antes de um textão.
 MAX_TOKENS_RESPOSTA = 450
+
+# Sem temperature explícita, a API usa o padrão do provedor (geralmente
+# alto o suficiente pra dar respostas bem diferentes pra mesma pergunta em
+# chamadas separadas) — testado ao vivo: a MESMA pergunta às vezes voltava
+# numa lista de 2 linhas, às vezes num "artigo" com tabela e cabeçalhos,
+# mesmo com a instrução de formatação no prompt. Temperatura mais baixa
+# deixa o modelo mais conservador/previsível — ainda responde bem, só
+# elabora menos por conta própria. (_sanitizar_formatacao acima é a
+# segunda camada de defesa, pro caso raro de ainda vir tabela/cabeçalho.)
+TEMPERATURA = 0.4
 
 # O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
 # Antes ele era criado no import, lendo os.environ["GROQ_API_KEY"] direto: se
@@ -285,6 +296,43 @@ def buscar_contexto(pergunta: str, acesso_gestao: bool = False) -> str:
     return "\n".join(partes)
 
 
+# Rede de segurança pra instrução de formatação do [4] TOM DE VOZ: pedir
+# educadamente pra não usar tabela/cabeçalho no prompt NÃO é garantia — a
+# mesma pergunta, na mesma sessão de testes, às vezes voltava limpa e às
+# vezes voltava com tabela markdown inteira. Como o balão de chat é
+# estreito e o renderizador de Markdown do front não trata tabela, uma
+# resposta com tabela aparece com "|" literal na tela — pior do que ter
+# convertido pra lista aqui.
+_RE_CABECALHO = re.compile(r"^#{1,6}\s+(.+)")
+_RE_LINHA_SEPARADORA_TABELA = re.compile(r"^\|?[\s:|-]+\|[\s:|-]*\|?$")
+
+
+def _sanitizar_formatacao(texto: str) -> str:
+    linhas_saida = []
+    for linha in texto.split("\n"):
+        bruta = linha.strip()
+
+        cabecalho = _RE_CABECALHO.match(bruta)
+        if cabecalho:
+            linhas_saida.append(f"**{cabecalho.group(1)}**")
+            continue
+
+        if "-" in bruta and _RE_LINHA_SEPARADORA_TABELA.match(bruta):
+            continue  # linha separadora de tabela ("|---|---|") — descarta
+
+        if bruta.startswith("|") and bruta.endswith("|") and len(bruta) > 1:
+            celulas = [c.strip() for c in bruta.strip("|").split("|") if c.strip()]
+            if len(celulas) >= 2:
+                linhas_saida.append(f"- **{celulas[0]}**: {' — '.join(celulas[1:])}")
+            elif celulas:
+                linhas_saida.append(f"- {celulas[0]}")
+            continue
+
+        linhas_saida.append(linha)
+
+    return "\n".join(linhas_saida)
+
+
 historico = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
@@ -298,8 +346,10 @@ def chat(pergunta: str) -> str:
     else:
         mensagem = pergunta
     historico.append({"role": "user", "content": mensagem})
-    resposta = obter_client().chat.completions.create(model=MODELO, messages=historico, max_tokens=MAX_TOKENS_RESPOSTA)
-    conteudo = resposta.choices[0].message.content
+    resposta = obter_client().chat.completions.create(
+        model=MODELO, messages=historico, max_tokens=MAX_TOKENS_RESPOSTA, temperature=TEMPERATURA
+    )
+    conteudo = _sanitizar_formatacao(resposta.choices[0].message.content)
     historico.append({"role": "assistant", "content": conteudo})
     return conteudo
 
@@ -328,8 +378,9 @@ def responder(pergunta: str, contexto_extra: str = None, acesso_gestao: bool = F
             {"role": "user", "content": mensagem},
         ],
         max_tokens=MAX_TOKENS_RESPOSTA,
+        temperature=TEMPERATURA,
     )
-    return resposta.choices[0].message.content
+    return _sanitizar_formatacao(resposta.choices[0].message.content)
 
 
 def main() -> None:
