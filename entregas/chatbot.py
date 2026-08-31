@@ -67,6 +67,19 @@ MAX_TOKENS_RESPOSTA = 450
 # segunda camada de defesa, pro caso raro de ainda vir tabela/cabeçalho.)
 TEMPERATURA = 0.4
 
+# Janela de memória da conversa (usada por responder(), a versão sem estado
+# da API): quantas TROCAS (par pergunta+resposta) anteriores entram no
+# contexto mandado pro modelo. Por contagem de mensagens, não de tokens —
+# um "token buffer" de verdade cortaria pelo tamanho exato em tokens (exige
+# o tokenizador específico do modelo, que a gente não tem aqui), mas na
+# prática o efeito é o mesmo que se pediu: sem isso, cada pergunta nova
+# esquecia tudo que foi dito antes (o chat via cada mensagem como uma
+# conversa nova, do zero) — com a janela, ele lembra as últimas
+# JANELA_HISTORICO trocas e esquece o que passou disso, ao contrário de
+# guardar a conversa inteira (cresceria o custo/latência de toda pergunta
+# sem limite, numa sessão de teste longa).
+JANELA_HISTORICO = 5
+
 # O cliente do Groq só é criado quando alguém realmente vai perguntar algo.
 # Antes ele era criado no import, lendo os.environ["GROQ_API_KEY"] direto: se
 # a chave não estivesse configurada (chave rotacionada, deploy novo em que
@@ -333,6 +346,27 @@ def _sanitizar_formatacao(texto: str) -> str:
     return "\n".join(linhas_saida)
 
 
+def _janela_do_historico(historico_anterior: list[dict] = None) -> list[dict]:
+    """Valida o histórico que o CLIENTE mandou (não confia cegamente — vem
+    de fora) e corta pras últimas JANELA_HISTORICO trocas (JANELA_HISTORICO
+    * 2 mensagens, pergunta+resposta intercaladas). Entrada mal-formada
+    (não é lista, item sem "role"/"content", role que não seja user/
+    assistant) é ignorada silenciosamente em vez de derrubar a resposta —
+    memória de conversa é um extra, uma pergunta legítima não deveria
+    falhar só porque o front mandou o histórico de um jeito inesperado."""
+    if not isinstance(historico_anterior, list):
+        return []
+    limpo = [
+        {"role": item["role"], "content": str(item["content"])}
+        for item in historico_anterior
+        if isinstance(item, dict)
+        and item.get("role") in ("user", "assistant")
+        and isinstance(item.get("content"), str)
+        and item["content"].strip()
+    ]
+    return limpo[-(JANELA_HISTORICO * 2):]
+
+
 historico = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
@@ -354,11 +388,19 @@ def chat(pergunta: str) -> str:
     return conteudo
 
 
-def responder(pergunta: str, contexto_extra: str = None, acesso_gestao: bool = False) -> str:
-    """Versão sem estado (não usa/altera o `historico` global) — cada
-    chamada é independente. Usada pela API (/api/chat), que pode atender
-    vários usuários ao mesmo tempo e não deve misturar a conversa de um
-    com a de outro.
+def responder(
+    pergunta: str,
+    contexto_extra: str = None,
+    acesso_gestao: bool = False,
+    historico_anterior: list[dict] = None,
+) -> str:
+    """Sem estado NO SERVIDOR (não usa/altera o `historico` global do
+    módulo — esse é só do chat() de terminal) — mas aceita o histórico
+    recente da conversa, mandado pronto pelo CLIENTE a cada chamada. Usada
+    pela API (/api/chat), que pode atender vários usuários ao mesmo tempo:
+    guardar a conversa no servidor exigiria uma sessão por usuário; deixar
+    o cliente reenviar a própria janela de mensagens é mais simples e não
+    arrisca misturar a conversa de um com a de outro.
 
     contexto_extra: dado do motorista logado (gasto pessoal), montado pela
     API — só depois de validar o PIN dele. Este arquivo não sabe nada sobre
@@ -366,17 +408,29 @@ def responder(pergunta: str, contexto_extra: str = None, acesso_gestao: bool = F
     pronto e verificado.
 
     acesso_gestao: ver docstring de buscar_contexto. Padrão False = o mínimo
-    de acesso; a API só passa True quando o token de admin foi validado."""
+    de acesso; a API só passa True quando o token de admin foi validado.
+
+    historico_anterior: lista de {"role": "user"|"assistant", "content": str},
+    mais antiga primeiro — as trocas ANTERIORES da conversa, sem a pergunta
+    atual (essa vem no parâmetro `pergunta`). Cortado pra no máximo
+    JANELA_HISTORICO trocas mesmo que o cliente mande mais — isso é uma
+    janela de memória por contagem de mensagens (bem mais simples que
+    contar tokens de verdade, que exigiria um tokenizador específico do
+    modelo só pra isso), não memória infinita: cresce o custo/latência de
+    toda pergunta nova sem limite, e é o tipo de coisa que uma sessão de
+    teste longa (ex: 40 perguntas seguidas) deixaria arrastado."""
     contexto = buscar_contexto(pergunta, acesso_gestao=acesso_gestao)
     if contexto_extra:
         contexto = f"{contexto_extra}\n{contexto}" if contexto else contexto_extra
     mensagem = f"Contexto do sistema:\n{contexto}\n\nPergunta: {pergunta}" if contexto else pergunta
+
+    mensagens = [{"role": "system", "content": SYSTEM_PROMPT}]
+    mensagens.extend(_janela_do_historico(historico_anterior))
+    mensagens.append({"role": "user", "content": mensagem})
+
     resposta = obter_client().chat.completions.create(
         model=MODELO,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": mensagem},
-        ],
+        messages=mensagens,
         max_tokens=MAX_TOKENS_RESPOSTA,
         temperature=TEMPERATURA,
     )

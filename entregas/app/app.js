@@ -251,6 +251,15 @@ function adicionarMensagem(quem, texto, temporaria = false) {
   return div;
 }
 
+// Janela de memória do chat: guarda só as últimas TROCAS_LEMBRADAS trocas
+// (pergunta+resposta) e manda de volta a cada pergunta nova — sem isso, a
+// API trata cada pergunta como uma conversa do zero (é sem estado de
+// propósito, ver docstring de chatbot.responder) e "esquece" o que acabou
+// de ser perguntado. Fica só na aba: fechar/atualizar a página reseta,
+// igual o resto do estado da tela.
+const TROCAS_LEMBRADAS = 5;
+let historicoChat = [];
+
 async function enviarPergunta() {
   const input = document.getElementById("chat-input");
   const pergunta = input.value.trim();
@@ -266,11 +275,17 @@ async function enviarPergunta() {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pergunta, placa: placaAtual, pin: pinAtual }),
+      body: JSON.stringify({ pergunta, placa: placaAtual, pin: pinAtual, historico: historicoChat }),
     });
     const data = await res.json();
     temp.remove();
-    adicionarMensagem("bot", res.ok ? data.resposta : (data.erro || "Não consegui responder agora."));
+    if (res.ok) {
+      adicionarMensagem("bot", data.resposta);
+      historicoChat.push({ role: "user", content: pergunta }, { role: "assistant", content: data.resposta });
+      historicoChat = historicoChat.slice(-TROCAS_LEMBRADAS * 2);
+    } else {
+      adicionarMensagem("bot", data.erro || "Não consegui responder agora.");
+    }
   } catch (err) {
     temp.remove();
     adicionarMensagem("bot", "Sem conexão com o servidor.");

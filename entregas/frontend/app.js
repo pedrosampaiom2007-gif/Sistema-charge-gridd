@@ -620,6 +620,14 @@ function adicionarMensagemIA(quem, texto, temporaria = false) {
   return div;
 }
 
+// Janela de memória do chat: guarda só as últimas TROCAS_LEMBRADAS trocas
+// (pergunta+resposta) e manda de volta a cada pergunta nova — sem isso, a
+// API trata cada pergunta como uma conversa do zero (é sem estado de
+// propósito, ver docstring de chatbot.responder) e "esquece" o que acabou
+// de ser perguntado.
+const TROCAS_LEMBRADAS = 5;
+let historicoChatIA = [];
+
 async function enviarPerguntaIA() {
   const input = document.getElementById("ia-chat-input");
   const pergunta = input.value.trim();
@@ -633,11 +641,17 @@ async function enviarPerguntaIA() {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` },
-      body: JSON.stringify({ pergunta }),
+      body: JSON.stringify({ pergunta, historico: historicoChatIA }),
     });
     const data = await res.json();
     temp.remove();
-    adicionarMensagemIA("bot", res.ok ? data.resposta : (data.erro || "Não consegui responder agora."));
+    if (res.ok) {
+      adicionarMensagemIA("bot", data.resposta);
+      historicoChatIA.push({ role: "user", content: pergunta }, { role: "assistant", content: data.resposta });
+      historicoChatIA = historicoChatIA.slice(-TROCAS_LEMBRADAS * 2);
+    } else {
+      adicionarMensagemIA("bot", data.erro || "Não consegui responder agora.");
+    }
   } catch (err) {
     temp.remove();
     adicionarMensagemIA("bot", "Sem conexão com o servidor.");

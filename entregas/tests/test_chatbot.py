@@ -1,8 +1,8 @@
 """
 Testes automatizados do chatbot (chatbot.py) — só a lógica pura
-(_sanitizar_formatacao). O resto (buscar_documentos, responder) depende do
-Groq e/ou do Postgret real, testado manualmente contra a API ao vivo, mesmo
-padrão do resto do projeto.
+(_sanitizar_formatacao, _janela_do_historico). O resto (buscar_documentos,
+responder) depende do Groq e/ou do Postgres real, testado manualmente
+contra a API ao vivo, mesmo padrão do resto do projeto.
 
 Como rodar (da raiz do repo):
     python -m unittest discover -s entregas/tests -v
@@ -87,6 +87,61 @@ class TestSanitizarFormatacao(unittest.TestCase):
         self.assertIn("- **A**: B", resultado)
         self.assertIn("- **1**: 2", resultado)
         self.assertIn("Fim.", resultado)
+
+
+class TestJanelaDoHistorico(unittest.TestCase):
+    """Regressão: sem histórico nenhum, cada pergunta virava uma conversa do
+    zero — quem perguntava "sobre carregamento seguro" e depois "sobre
+    todos" (querendo dizer "sobre todos os pontos que você citou") recebia
+    uma resposta sobre faturamento, sem relação nenhuma com a pergunta
+    anterior, porque o servidor nunca via a pergunta anterior."""
+
+    def test_historico_none_vira_lista_vazia(self):
+        self.assertEqual(chatbot._janela_do_historico(None), [])
+
+    def test_historico_que_nao_e_lista_vira_lista_vazia(self):
+        self.assertEqual(chatbot._janela_do_historico("nao é uma lista"), [])
+        self.assertEqual(chatbot._janela_do_historico({"role": "user"}), [])
+
+    def test_historico_valido_passa_intacto_se_couber_na_janela(self):
+        historico = [
+            {"role": "user", "content": "oi"},
+            {"role": "assistant", "content": "olá!"},
+        ]
+        self.assertEqual(chatbot._janela_do_historico(historico), historico)
+
+    def test_corta_pras_ultimas_janela_historico_trocas(self):
+        # JANELA_HISTORICO trocas = JANELA_HISTORICO * 2 mensagens; manda o
+        # dobro disso e confere que só a metade mais recente sobrevive.
+        historico = [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg{i}"}
+            for i in range(chatbot.JANELA_HISTORICO * 4)
+        ]
+        resultado = chatbot._janela_do_historico(historico)
+        self.assertEqual(len(resultado), chatbot.JANELA_HISTORICO * 2)
+        self.assertEqual(resultado, historico[-(chatbot.JANELA_HISTORICO * 2):])
+
+    def test_ignora_item_com_role_invalida(self):
+        historico = [
+            {"role": "system", "content": "isso não deveria vir do cliente"},
+            {"role": "user", "content": "pergunta válida"},
+        ]
+        resultado = chatbot._janela_do_historico(historico)
+        self.assertEqual(resultado, [{"role": "user", "content": "pergunta válida"}])
+
+    def test_ignora_item_sem_content_ou_content_vazio(self):
+        historico = [
+            {"role": "user"},
+            {"role": "assistant", "content": ""},
+            {"role": "user", "content": "essa fica"},
+        ]
+        resultado = chatbot._janela_do_historico(historico)
+        self.assertEqual(resultado, [{"role": "user", "content": "essa fica"}])
+
+    def test_ignora_item_que_nao_e_dict(self):
+        historico = ["string solta", 123, {"role": "user", "content": "válida"}]
+        resultado = chatbot._janela_do_historico(historico)
+        self.assertEqual(resultado, [{"role": "user", "content": "válida"}])
 
 
 if __name__ == "__main__":

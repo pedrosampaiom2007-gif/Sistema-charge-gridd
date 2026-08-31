@@ -624,6 +624,10 @@ def api_chat():
     pergunta = (dados.get("pergunta") or "").strip()
     placa = (dados.get("placa") or "").strip()
     pin = (dados.get("pin") or "").strip()
+    # Janela de memória da conversa: o cliente reenvia as últimas trocas a
+    # cada pergunta nova (a API não guarda sessão de chat por usuário) — ver
+    # docstring de chatbot._janela_do_historico pra validação/corte.
+    historico = dados.get("historico")
     if not pergunta:
         return jsonify({"erro": "Pergunta é obrigatória."}), 400
 
@@ -651,6 +655,7 @@ def api_chat():
             pergunta,
             contexto_extra=contexto_extra,
             acesso_gestao=acesso_gestao,
+            historico_anterior=historico,
         )
     except Exception as e:
         return jsonify({"erro": f"Chatbot indisponível: {e}"}), 503
