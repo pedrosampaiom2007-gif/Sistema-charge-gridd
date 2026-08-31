@@ -374,6 +374,46 @@ def api_encerrar_sessao(estacao_num: int):
     return jsonify({"ok": True, "recibo": recibo})
 
 
+@app.get("/api/sessoes/<int:estacao_num>/estimar")
+def api_estimar_sessao(estacao_num: int):
+    """"E se eu continuasse carregando por mais X minutos?" — prévia de
+    custo pro motorista decidir se encerra agora ou continua, SEM alterar
+    nada de verdade (não grava no banco, não mexe no objeto da estação).
+
+    Reaproveita a mesma fórmula de simular_tempo() (potência atual x tempo,
+    tarifado por ia_calcular_tarifa) em vez de duplicar a conta no
+    JavaScript do totem — desse jeito a prévia nunca diverge do valor que
+    a próxima chamada real de simular_tempo() vai cobrar de fato. Aberta
+    (sem login), igual /api/painel: o totem não tem login, e isso não é
+    dado de negócio agregado, é só a sessão que já está na tela.
+
+    Simplificação assumida: a tarifa usa o número de estações ativas
+    AGORA (não prevê quantas vão ligar/desligar nos próximos X minutos) —
+    é uma estimativa, não uma promessa de preço fechado."""
+    idx = estacao_num - 1
+    if not (0 <= idx < cg.MAX_ESTACOES) or not cg.estacoes[idx].ativa:
+        return jsonify({"erro": "Estação inativa ou inexistente."}), 400
+
+    minutos = request.args.get("minutos", 30, type=int) or 30
+    minutos = max(1, min(minutos, 240))  # trava entre 1 min e 4h — sanidade, não é pra virar calculadora de dia inteiro
+
+    e = cg.estacoes[idx]
+    fator = cg.ia_calcular_tarifa(e.hora_inicio, cg.contar_ativas())
+    energia_projetada = e.potencia_kw * (minutos / 60)
+    kwh_projetado = e.kwh_consumidos + energia_projetada
+    valor_projetado = round(kwh_projetado * cg.TARIFA_BASE_KWH * fator, 2)
+
+    return jsonify({
+        "estacao": estacao_num,
+        "minutos_simulados": minutos,
+        "kwh_atual": round(e.kwh_consumidos, 2),
+        "valor_atual": round(e.valor_sessao, 2),
+        "kwh_projetado": round(kwh_projetado, 2),
+        "valor_projetado": valor_projetado,
+        "custo_adicional": round(valor_projetado - e.valor_sessao, 2),
+    })
+
+
 @app.post("/api/tempo/avancar")
 def api_avancar_tempo():
     """Equivalente à opção 2 do menu: avança +30min de simulação.

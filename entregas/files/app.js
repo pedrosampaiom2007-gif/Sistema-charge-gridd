@@ -258,6 +258,28 @@ async function atualizarSessaoAoVivo() {
   }
 }
 
+// ─── Simulador "e se eu carregar mais X min?" ───────────────────────────────────
+// Só uma prévia — não muda a sessão de verdade, só mostra uma estimativa
+// calculada pela API (mesma fórmula da tarifação real, ver api_estimar_sessao)
+// pro motorista decidir se compensa esperar mais ou encerrar agora.
+document.getElementById("btn-simular-tempo").addEventListener("click", async () => {
+  const resultado = document.getElementById("simulador-resultado");
+  try {
+    const res = await fetch(`${API_BASE}/api/sessoes/${ESTACAO}/estimar?minutos=30`);
+    const data = await res.json();
+    if (!res.ok) { showToast(data.erro || "Não foi possível simular agora."); return; }
+
+    resultado.innerHTML = `
+      Se continuar carregando por mais <b>30 min</b> no ritmo atual:<br>
+      <span class="destaque">${fmtMoeda(data.valor_projetado)}</span>
+      (+${fmtMoeda(data.custo_adicional)}, ${data.kwh_projetado.toFixed(2)} kWh no total)
+    `;
+    resultado.hidden = false;
+  } catch (err) {
+    showToast("Sem conexão com o servidor.");
+  }
+});
+
 // ─── Tela 3 -> 4: encerrar sessão e mostrar QR Pix ──────────────────────────────
 document.getElementById("btn-encerrar").addEventListener("click", async () => {
   clearInterval(liveTickTimer);
@@ -306,6 +328,7 @@ document.getElementById("btn-concluir").addEventListener("click", resetarParaLiv
 function resetarParaLivre() {
   cronometroAtivo = false;
   clearInterval(liveTickTimer);
+  document.getElementById("simulador-resultado").hidden = true; // não vaza a simulação do cliente anterior
   irPara("livre");
 }
 
