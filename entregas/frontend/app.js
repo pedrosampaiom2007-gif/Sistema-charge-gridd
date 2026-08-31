@@ -146,12 +146,12 @@ function classeDoStatus(status) {
   return "livre";
 }
 
-// Resultado do simulador por estação — guardado FORA do render, porque
-// renderEstacoes() reconstrói o grid inteiro a cada poll (4s); sem isso, o
-// resultado sumia antes do admin ter tempo de ler. Some quando a estação
-// deixa de estar ativa (sessão encerrada), pra não mostrar prévia velha
-// pro próximo cliente que ligar naquela estação.
-const simulacoesEstacao = {}; // { [estacao]: "texto pronto pra mostrar" }
+// Minutos digitados no campo de simulação de cada estação — guardado FORA
+// do render, porque renderEstacoes() reconstrói o grid inteiro a cada poll
+// (4s); sem isso, o admin perdia o número digitado no meio da digitação.
+// Some quando a estação deixa de estar ativa, pra não herdar valor de uma
+// sessão anterior.
+const minutosSimulacao = {}; // { [estacao]: minutos digitados, default 30 }
 
 function renderEstacoes(estacoes) {
   const grid = document.getElementById("station-grid");
@@ -162,7 +162,7 @@ function renderEstacoes(estacoes) {
     const emManutencao = e.status === "Manutenção";
     const classe = classeDoStatus(e.status);
 
-    if (!ativa) delete simulacoesEstacao[e.estacao];
+    if (!ativa) delete minutosSimulacao[e.estacao];
 
     // O botão principal muda de ação conforme o estado; "colocar em
     // manutenção" só faz sentido pra estação Livre — não dá pra marcar uma
@@ -172,7 +172,15 @@ function renderEstacoes(estacoes) {
     let botaoSimular = "";
     if (ativa) {
       botaoPrincipal = `<button class="btn small danger" data-estacao="${e.estacao}" data-acao="encerrar">Encerrar sessão</button>`;
-      botaoSimular = `<button class="btn small" data-estacao="${e.estacao}" data-acao="simular">Simular +30min</button>`;
+      // Avança de VERDADE (grava no banco) — diferente da prévia do totem.
+      // Admin-only, por isso só existe aqui: mexe no valor que o motorista
+      // vai pagar, existe pra demonstrar o fluxo completo de cobrança numa
+      // apresentação sem esperar o loop automático (+30min a cada 15s reais).
+      const minAtual = minutosSimulacao[e.estacao] ?? 30;
+      botaoSimular = `
+        <input type="number" class="input-minutos" id="min-${e.estacao}" value="${minAtual}" min="1" max="1440" title="Minutos a avançar">
+        <button class="btn small" data-estacao="${e.estacao}" data-acao="avancar">Simular</button>
+      `;
     } else if (emManutencao) {
       botaoPrincipal = `<button class="btn small" data-estacao="${e.estacao}" data-acao="sair-manutencao">Sair da manutenção</button>`;
     } else {
@@ -184,7 +192,6 @@ function renderEstacoes(estacoes) {
     const motivo = (emManutencao && e.motivo_manutencao)
       ? `<div class="motivo-manutencao">Motivo: ${e.motivo_manutencao}</div>`
       : "";
-    const simTexto = simulacoesEstacao[e.estacao];
 
     const card = document.createElement("div");
     card.className = `station ${classe}`;
@@ -202,11 +209,16 @@ function renderEstacoes(estacoes) {
         <div><div class="k">Pagto</div><div class="v">${e.metodo_pagamento}</div></div>
       </div>
       ${motivo}
-      <div class="actions">${botaoPrincipal}${botaoSimular}</div>
-      <div class="simulador-resultado-admin" id="sim-resultado-${e.estacao}" ${simTexto ? "" : "hidden"}>${simTexto || ""}</div>
+      <div class="actions">${botaoPrincipal}</div>
+      ${ativa ? `<div class="simular-linha">${botaoSimular}</div>` : ""}
       ${linkManutencao}
     `;
     grid.appendChild(card);
+  });
+
+  grid.querySelectorAll("input.input-minutos[id]").forEach((input) => {
+    const num = Number(input.id.replace("min-", ""));
+    input.addEventListener("input", () => { minutosSimulacao[num] = input.value; });
   });
 
   grid.querySelectorAll("button[data-estacao]").forEach((btn) => {
@@ -215,6 +227,7 @@ function renderEstacoes(estacoes) {
       const acao = btn.dataset.acao;
       if (acao === "encerrar") encerrarSessao(num);
       else if (acao === "iniciar") abrirModal(num);
+      else if (acao === "avancar") avancarSessaoEstacao(num);
       else if (acao === "entrar-manutencao") abrirModalManutencao(num);
       else if (acao === "sair-manutencao") sairDaManutencao(num);
       else if (acao === "simular") simularTempoEstacao(num);
@@ -486,22 +499,28 @@ async function encerrarSessao(numEstacao) {
   }
 }
 
-// ─── Simulador "e se essa sessão continuasse por mais 30 min?" ─────────────
-// Mesma rota que o totem usa (api_estimar_sessao) — não recalcula tarifa
-// aqui, só mostra o que a API já calculou, pra nunca divergir do valor que
-// seria cobrado de verdade. Resultado fica em simulacoesEstacao (ver
-// comentário lá em cima) pra sobreviver ao próximo poll.
-async function simularTempoEstacao(numEstacao) {
+// ─── Avançar sessão DE VERDADE (admin) ─────────────────────────────────────
+// Diferente da prévia do totem (api_estimar_sessao, só calcula e mostra):
+// isso GRAVA no banco de verdade. Existe pro admin demonstrar o fluxo
+// completo — recarga rendendo um valor real, encerrar, recibo — sem
+// precisar esperar o loop automático (+30min a cada 15s reais) acumular
+// algo que valha a pena mostrar numa apresentação. Pode clicar quantas
+// vezes quiser: cada clique SOMA em cima do que já tinha.
+async function avancarSessaoEstacao(numEstacao) {
+  const input = document.getElementById(`min-${numEstacao}`);
+  const minutos = Number(input.value) || 30;
+  minutosSimulacao[numEstacao] = minutos;
+
   try {
-    const res = await fetch(`${API_BASE}/api/sessoes/${numEstacao}/estimar?minutos=30`);
+    const res = await fetch(`${API_BASE}/api/sessoes/${numEstacao}/avancar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` },
+      body: JSON.stringify({ minutos }),
+    });
     const data = await res.json();
     if (!res.ok) { showToast(data.erro || "Não foi possível simular agora."); return; }
-
-    simulacoesEstacao[numEstacao] =
-      `+30min ≈ <b>${fmtMoeda(data.valor_projetado)}</b> (+${fmtMoeda(data.custo_adicional)})`;
-
-    const el = document.getElementById(`sim-resultado-${numEstacao}`);
-    if (el) { el.innerHTML = simulacoesEstacao[numEstacao]; el.hidden = false; }
+    showToast(`Estação ${numEstacao}: +${minutos}min aplicado — novo valor ${fmtMoeda(data.estacao.valor_sessao)}`);
+    refresh();
   } catch (err) {
     showToast("Erro de conexão com a API.");
   }

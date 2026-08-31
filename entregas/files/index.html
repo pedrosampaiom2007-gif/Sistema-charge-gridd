@@ -88,7 +88,11 @@
       </div>
     </div>
     <div class="simulador-tempo">
-      <button class="btn-secundario" id="btn-simular-tempo">Simular +30 min de carga</button>
+      <div class="simulador-campo">
+        <label for="f-minutos-simular">Simular quantos minutos a mais?</label>
+        <input id="f-minutos-simular" type="number" value="30" min="1" max="240" inputmode="numeric">
+      </div>
+      <button class="btn-secundario" id="btn-simular-tempo">Ver quanto vai ficar</button>
       <div class="simulador-resultado" id="simulador-resultado" hidden></div>
     </div>
     <button class="btn-mega amber" id="btn-encerrar">Encerrar e pagar</button>

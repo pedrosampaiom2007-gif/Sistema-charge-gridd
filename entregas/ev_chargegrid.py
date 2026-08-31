@@ -940,8 +940,36 @@ def balancear_carga() -> None:
 
 
 # ─── Simulação de passagem de tempo ───────────────────────────────────────────
-def simular_tempo() -> None:
+def _aplicar_avanco(e: "SessaoRecarga", minutos: float, estacoes_ativas: int, cursor) -> None:
+    """Núcleo de "avançar o relógio" pra UMA estação: soma o consumo do
+    período, recalcula o valor acumulado, grava no banco. Compartilhado por
+    simular_tempo() (todas as ativas, +30min fixo, chamado pelo loop
+    automático da API a cada SIMULACAO_INTERVALO_SEGUNDOS) e
+    avancar_sessao_estacao() (uma estação só, minutos arbitrários, chamado
+    pelo botão do admin) — a matemática de tarifação não pode divergir
+    entre os dois caminhos."""
     global consumo_total_diario
+    fator              = ia_calcular_tarifa(e.hora_inicio, estacoes_ativas)
+    energia            = e.potencia_kw * (minutos / 60)
+    e.kwh_consumidos  += energia
+    consumo_total_diario += energia
+    e.valor_sessao     = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
+
+    cursor.execute(
+        "UPDATE sessoes SET kwh_consumidos = %s, valor_sessao = %s WHERE id = %s",
+        (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db)
+    )
+    ocpp_enviar("MeterValues", e.id_estacao, {
+        "usuario":    e.id_usuario,
+        "potenciaKw": round(e.potencia_kw, 2),
+        "leituraKwh": round(e.kwh_consumidos, 2),
+        "valorSessao": e.valor_sessao,
+        "fatorTarifa": fator,
+        "iaDemanda":  ia_prever_demanda(e.hora_inicio),
+    })
+
+
+def simular_tempo() -> None:
     n = contar_ativas()
     if n == 0:
         print("\n[AVISO] Nenhuma sessão comercial ativa.")
@@ -950,29 +978,30 @@ def simular_tempo() -> None:
     print("\n[SISTEMA] Avançando +30 min...")
     with conectar() as conn:
         cursor = conn.cursor()
-
         for e in estacoes:
-            if not e.ativa:
-                continue
-            fator              = ia_calcular_tarifa(e.hora_inicio, n)
-            energia            = e.potencia_kw * 0.5
-            e.kwh_consumidos  += energia
-            consumo_total_diario += energia
-            e.valor_sessao     = round(e.kwh_consumidos * TARIFA_BASE_KWH * fator, 2)
+            if e.ativa:
+                _aplicar_avanco(e, 30, n, cursor)
 
-            cursor.execute(
-                "UPDATE sessoes SET kwh_consumidos = %s, valor_sessao = %s WHERE id = %s",
-                (e.kwh_consumidos, e.valor_sessao, e.id_sessao_db)
-            )
 
-            ocpp_enviar("MeterValues", e.id_estacao, {
-                "usuario":    e.id_usuario,
-                "potenciaKw": round(e.potencia_kw, 2),
-                "leituraKwh": round(e.kwh_consumidos, 2),
-                "valorSessao": e.valor_sessao,
-                "fatorTarifa": fator,
-                "iaDemanda":  ia_prever_demanda(e.hora_inicio),
-            })
+def avancar_sessao_estacao(estacao_num: int, minutos: float) -> bool:
+    """Avança UMA sessão específica por `minutos` DE VERDADE — grava no
+    banco e atualiza o objeto em memória, ao contrário de uma prévia (ver
+    api_estimar_sessao) que só calcula e mostra, sem gravar nada. Existe
+    pro admin poder demonstrar o fluxo completo de cobrança (recarga →
+    encerrar → recibo com valor real) numa apresentação, sem depender do
+    loop automático (+30min a cada 15s reais) pra acumular um valor que
+    valha a pena mostrar. Pode ser chamado quantas vezes quiser — cada
+    chamada SOMA em cima do que já tinha, não substitui.
+
+    Retorna False se a estação não existir ou não estiver ativa (nada é
+    gravado nesse caso)."""
+    idx = estacao_num - 1
+    if not (0 <= idx < MAX_ESTACOES) or not estacoes[idx].ativa:
+        return False
+    with conectar() as conn:
+        cursor = conn.cursor()
+        _aplicar_avanco(estacoes[idx], minutos, contar_ativas(), cursor)
+    return True
 
 
 # ─── Início de sessão ─────────────────────────────────────────────────────────

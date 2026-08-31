@@ -430,6 +430,32 @@ def api_avancar_tempo():
     return jsonify({"ok": True, "painel": painel().json})
 
 
+@app.post("/api/sessoes/<int:estacao_num>/avancar")
+@limiter.limit("60 per minute")
+def api_avancar_sessao(estacao_num: int):
+    """Avança UMA sessão específica por X minutos DE VERDADE — grava no
+    banco, diferente de /api/sessoes/<n>/estimar (só prévia, não grava
+    nada). Admin-only pelo mesmo motivo de /api/tempo/avancar: mexe em
+    dinheiro que o motorista vai pagar. Existe pro admin poder demonstrar
+    o fluxo completo (recarga → encerrar → recibo com valor real) numa
+    apresentação sem depender do loop automático (+30min a cada 15s reais)
+    pra acumular um valor que valha a pena mostrar. Pode ser chamada
+    quantas vezes quiser — cada chamada SOMA em cima do que já tinha."""
+    if not _token_admin_valido():
+        return jsonify({"erro": "Login de administrador necessário."}), 401
+
+    dados = request.get_json(force=True) or {}
+    try:
+        minutos = float(dados.get("minutos", 30))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "Minutos inválido."}), 400
+    minutos = max(1, min(minutos, 1440))  # trava entre 1 min e 24h
+
+    if not cg.avancar_sessao_estacao(estacao_num, minutos):
+        return jsonify({"erro": "Estação inativa ou inexistente."}), 400
+    return jsonify({"ok": True, "estacao": estacao_para_dict(cg.estacoes[estacao_num - 1])})
+
+
 # ─── Telemetria de hardware (sensor físico de ocupação de vaga) ──────────────
 # Contrato pronto pra quando o ESP32 existir de verdade (ver
 # docs/TAREFAS_EQUIPE.md) — o hardware manda {"ocupada": true/false} a cada

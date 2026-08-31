@@ -172,6 +172,28 @@ p.sub {
   gap: 10px;
   margin-bottom: 8px;
 }
+.simulador-campo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.simulador-campo label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.simulador-campo input {
+  width: 64px;
+  background: var(--panel-raised);
+  border: 2px solid var(--line-bright);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  text-align: center;
+  border-radius: 8px;
+}
+.simulador-campo input:focus { outline: none; border-color: var(--cyan); }
 .simulador-resultado {
   font-family: var(--font-mono);
   font-size: 13px;

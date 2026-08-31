@@ -264,13 +264,14 @@ async function atualizarSessaoAoVivo() {
 // pro motorista decidir se compensa esperar mais ou encerrar agora.
 document.getElementById("btn-simular-tempo").addEventListener("click", async () => {
   const resultado = document.getElementById("simulador-resultado");
+  const minutos = Number(document.getElementById("f-minutos-simular").value) || 30;
   try {
-    const res = await fetch(`${API_BASE}/api/sessoes/${ESTACAO}/estimar?minutos=30`);
+    const res = await fetch(`${API_BASE}/api/sessoes/${ESTACAO}/estimar?minutos=${minutos}`);
     const data = await res.json();
     if (!res.ok) { showToast(data.erro || "Não foi possível simular agora."); return; }
 
     resultado.innerHTML = `
-      Se continuar carregando por mais <b>30 min</b> no ritmo atual:<br>
+      Se continuar carregando por mais <b>${data.minutos_simulados} min</b> no ritmo atual:<br>
       <span class="destaque">${fmtMoeda(data.valor_projetado)}</span>
       (+${fmtMoeda(data.custo_adicional)}, ${data.kwh_projetado.toFixed(2)} kWh no total)
     `;
