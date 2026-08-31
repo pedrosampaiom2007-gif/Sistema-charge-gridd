@@ -695,7 +695,13 @@ def api_chat():
     anônimo.
 
     O gasto pessoal exige o mesmo PIN do histórico: sem isso, dava pra usar o
-    chat pra contornar a checagem que /api/usuarios/historico já faz."""
+    chat pra contornar a checagem que /api/usuarios/historico já faz.
+
+    O contexto de gasto pessoal SÓ entra quando a pergunta é sobre isso —
+    o app manda placa+pin em TODA mensagem (não sabe de antemão do que vai
+    ser a pergunta), e injetar esse bloco sempre, mesmo pra "como eu
+    carrego meu carro", fazia o modelo se prender ao dado financeiro e
+    ignorar o assunto real da pergunta (relatado ao vivo, ver commit)."""
     dados = request.get_json(force=True) or {}
     pergunta = (dados.get("pergunta") or "").strip()
     placa = (dados.get("placa") or "").strip()
@@ -710,20 +716,25 @@ def api_chat():
     acesso_gestao = _token_admin_valido()
     contexto_extra = None
 
-    if placa and pin:
+    pergunta_e_sobre_dado_pessoal = any(
+        p in pergunta.lower()
+        for p in ("gast", "pag", "cashback", "resgat", "histórico", "historico", "saldo", "devo", "custou", "cobra")
+    )
+
+    if placa and pin and pergunta_e_sobre_dado_pessoal:
         if not cg.validar_pin(placa, pin):
             return jsonify({"erro": "Placa ou PIN incorretos."}), 403
         sessoes = cg.historico_usuario(placa)
         total_pessoal = sum(s["valor"] for s in sessoes)
-        cashback_total = round(sum(s["cashback"] for s in sessoes), 2)
+        saldo_disponivel = cg.saldo_cashback(placa)
         contexto_extra = (
             f"[GASTO PESSOAL DO MOTORISTA LOGADO — placa {placa.upper()}] "
             f"Total já gasto por esse motorista em {len(sessoes)} sessão(ões): "
             f"R$ {total_pessoal:.2f}. Isso é o gasto individual DESSE motorista, "
             f"diferente do faturamento/receita total do sistema (que soma todos "
-            f"os clientes). Cashback acumulado por esse motorista (5% de toda "
-            f"sessão paga, benefício de carregar pela ChargeGrid): R$ {cashback_total:.2f} "
-            f"— é saldo mostrado no app, ainda sem resgate implementado."
+            f"os clientes). Cashback disponível pra resgate agora (5% de toda "
+            f"sessão paga, benefício de carregar pela ChargeGrid): R$ {saldo_disponivel:.2f} "
+            f"— dá pra trocar por milhas ou desconto em ingresso na tela 'Minha Conta'."
         )
 
     try:
