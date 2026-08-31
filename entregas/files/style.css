@@ -80,6 +80,18 @@ body {
 }
 .link-inicio:hover { color: var(--cyan); }
 
+.link-conta {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+}
+.link-conta:hover { color: var(--cyan); }
+
 /* Telas (steps) */
 .screen {
   display: none;
