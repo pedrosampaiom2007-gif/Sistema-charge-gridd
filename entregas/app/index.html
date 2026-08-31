@@ -56,8 +56,17 @@
     </div>
   </div>
   <div class="cashback-box">
-    <span class="cashback-label">Cashback acumulado</span>
+    <span class="cashback-label">Cashback disponível</span>
     <span class="cashback-valor" id="cashback-total">R$ 0,00</span>
+    <button class="btn small" id="btn-trocar-cashback">Trocar</button>
+  </div>
+  <div id="cashback-resgate-box" class="add-carro-box" hidden>
+    <p class="section-caption">Escolha uma opção pra trocar todo o seu saldo disponível:</p>
+    <div class="row-botoes" id="cashback-opcoes"></div>
+    <div class="error-msg" id="cashback-resgate-error"></div>
+    <div class="row">
+      <button class="btn small" id="btn-cancelar-cashback">Cancelar</button>
+    </div>
   </div>
   <div id="add-carro-box" class="add-carro-box" hidden>
     <div class="field">

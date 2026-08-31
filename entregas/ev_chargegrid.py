@@ -122,13 +122,11 @@ USAR_API_REAL_MERCADOPAGO = False
 
 
 def calcular_cashback(valor_sessao: float) -> float:
-    """Cashback simulado: CASHBACK_PCT do valor de uma sessão PAGA, como
-    benefício de carregar pela ChargeGrid em vez de um ponto avulso sem
-    fidelização. É saldo acumulado e mostrado ao motorista (`historico_usuario`
-    soma isso em cada sessão), não dinheiro sacável — não existe fluxo de
-    resgate ainda, mesma honestidade do resto do sistema em relação a
-    pagamento real (PIX/Cartão/App/QRCode aqui também são só rótulos, sem
-    gateway de verdade por trás)."""
+    """CASHBACK_PCT do valor de uma sessão PAGA, como benefício de carregar
+    pela ChargeGrid em vez de um ponto avulso sem fidelização. Não é
+    dinheiro sacável — vira saldo trocável no catálogo de resgate (ver
+    saldo_cashback/resgatar_cashback, mais abaixo, depois de
+    historico_usuario)."""
     return round(valor_sessao * CASHBACK_PCT, 2)
 
 # ─── IA: modelo de previsão de demanda (Kevin / Pedro — 07/07) ────────────────
@@ -273,6 +271,23 @@ def inicializar_banco():
             CREATE TABLE IF NOT EXISTS admins (
                 usuario    TEXT PRIMARY KEY,
                 senha_hash TEXT
+            )
+        """)
+
+        # Resgate de cashback: cada linha é UM resgate (histórico, não um
+        # saldo que se sobrescreve) — saldo_cashback() soma o que foi ganho
+        # (via sessões pagas) e SUBTRAI o que já está aqui. Sem essa tabela,
+        # cashback só era somado, nunca gasto — dava pra "resgatar" o mesmo
+        # saldo quantas vezes quisesse, porque nada registrava que já tinha
+        # sido usado.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cashback_resgates (
+                id              SERIAL PRIMARY KEY,
+                conta_id        INTEGER REFERENCES contas(id),
+                tipo            TEXT,
+                valor_resgatado REAL,
+                detalhe         TEXT,
+                criado_em       TEXT
             )
         """)
 
@@ -708,6 +723,78 @@ def historico_usuario(placa: str) -> list[dict]:
             # que entrou de verdade, não faz sentido "devolver" uma parte dele.
             s["cashback"] = calcular_cashback(s["valor"]) if s["status_pagamento"] == "PAGO" else 0.0
         return sessoes
+
+
+# ─── Resgate de cashback ───────────────────────────────────────────────────
+# taxa_por_real: quanto de prêmio 1 real de cashback vale. Front (app.js)
+# mostra essa mesma taxa como prévia antes do motorista escolher — se mudar
+# aqui, teria que mudar lá também (é só o texto do rótulo, o valor cobrado
+# de verdade sempre vem calculado por este dicionário, nunca do front).
+CATALOGO_RESGATE = {
+    "milhas":   {"nome": "Milhas aéreas",        "unidade": "milhas",            "taxa_por_real": 20},
+    "ingresso": {"nome": "Desconto em ingresso", "unidade": "reais de desconto", "taxa_por_real": 1},
+}
+
+
+def saldo_cashback(placa: str) -> float:
+    """Cashback ainda não resgatado: tudo que a conta já ganhou (soma do
+    campo "cashback" de historico_usuario, sessões pagas) menos tudo que já
+    foi resgatado (cashback_resgates). É a ÚNICA função que subtrai — sem
+    isso, o saldo mostrado nunca baixava depois de um resgate, e dava pra
+    resgatar a mesma coisa infinitas vezes."""
+    conta_id = conta_da_placa(placa)
+    if conta_id is None:
+        return 0.0
+
+    ganho = sum(s["cashback"] for s in historico_usuario(placa))
+
+    with conectar(somente_leitura=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(SUM(valor_resgatado), 0) FROM cashback_resgates WHERE conta_id = %s",
+            (conta_id,)
+        )
+        resgatado = float(cursor.fetchone()[0])
+
+    return round(ganho - resgatado, 2)
+
+
+def resgatar_cashback(placa: str, tipo: str) -> Optional[dict]:
+    """Resgata TODO o saldo disponível de uma vez (não parcial — mantém a
+    tela simples: escolhe o prêmio, não digita quanto). Devolve o recibo do
+    resgate, ou None se o tipo não existir no catálogo, a placa não tiver
+    conta, ou não sobrar saldo pra resgatar."""
+    info = CATALOGO_RESGATE.get(tipo)
+    if info is None:
+        return None
+
+    conta_id = conta_da_placa(placa)
+    if conta_id is None:
+        return None
+
+    saldo = saldo_cashback(placa)
+    if saldo <= 0:
+        return None
+
+    quantidade = round(saldo * info["taxa_por_real"], 2)
+    detalhe = f"{quantidade:g} {info['unidade']}"
+    agora = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    with conectar() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO cashback_resgates (conta_id, tipo, valor_resgatado, detalhe, criado_em)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (conta_id, tipo, saldo, detalhe, agora)
+        )
+
+    return {
+        "tipo": tipo,
+        "nome": info["nome"],
+        "valor_resgatado": saldo,
+        "quantidade": quantidade,
+        "unidade": info["unidade"],
+    }
 
 
 def obter_potencia_estacoes() -> dict:

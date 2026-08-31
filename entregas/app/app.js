@@ -12,6 +12,8 @@ const API_BASE = (location.protocol === "file:" || location.hostname === "localh
 let placaAtual = null;
 let pinAtual = null; // guardado só em memória, reaproveitado por "+ Adicionar carro"
 let modoCadastroLogin = false; // true = tela de login virou "cadastre-se"
+let cashbackDisponivelAtual = 0;
+let catalogoResgateCache = null; // busca uma vez só, o catálogo não muda em runtime
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function showToast(msg) {
@@ -85,6 +87,7 @@ async function fazerLogin() {
     document.getElementById("placa-label").textContent = placa;
     document.getElementById("overlay-login").classList.remove("open");
     renderHistorico(data.sessoes);
+    atualizarSaldoCashback(data.cashback_disponivel || 0);
   } catch (err) {
     errEl.textContent = "Sem conexão com o servidor. A API está rodando?";
   } finally {
@@ -113,12 +116,89 @@ async function atualizarHistorico() {
     // a tela simplesmente parava de atualizar sem dizer nada.
     if (!res.ok) { showToast(data.erro || "Não foi possível atualizar agora."); return; }
     renderHistorico(data.sessoes);
-    document.getElementById("cashback-total").textContent = fmtMoeda(data.cashback_total || 0);
+    atualizarSaldoCashback(data.cashback_disponivel || 0);
   } catch (err) {
     showToast("Sem conexão com o servidor.");
   } finally {
     btn.disabled = false;
     btn.textContent = textoOriginal;
+  }
+}
+
+// ─── Resgate de cashback ─────────────────────────────────────────────────────
+function atualizarSaldoCashback(valor) {
+  cashbackDisponivelAtual = valor;
+  document.getElementById("cashback-total").textContent = fmtMoeda(valor);
+}
+
+async function abrirResgateCashback() {
+  const box = document.getElementById("cashback-resgate-box");
+  const erro = document.getElementById("cashback-resgate-error");
+  erro.textContent = "";
+
+  if (cashbackDisponivelAtual <= 0) {
+    showToast("Sem saldo de cashback disponível pra resgatar ainda.");
+    return;
+  }
+
+  if (!catalogoResgateCache) {
+    try {
+      const res = await fetch(`${API_BASE}/api/usuarios/cashback/catalogo`);
+      catalogoResgateCache = await res.json();
+    } catch (err) {
+      showToast("Sem conexão com o servidor.");
+      return;
+    }
+  }
+
+  renderOpcoesResgate();
+  box.hidden = false;
+}
+
+function fecharResgateCashback() {
+  document.getElementById("cashback-resgate-box").hidden = true;
+}
+
+function renderOpcoesResgate() {
+  const container = document.getElementById("cashback-opcoes");
+  container.innerHTML = Object.entries(catalogoResgateCache).map(([tipo, info]) => {
+    const quantidade = Math.round(cashbackDisponivelAtual * info.taxa_por_real * 100) / 100;
+    return `
+      <button class="opcao-resgate" data-tipo="${tipo}">
+        <div class="nome">${info.nome}</div>
+        <div class="previa">≈ ${quantidade} ${info.unidade}</div>
+      </button>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".opcao-resgate").forEach((btn) => {
+    btn.addEventListener("click", () => confirmarResgate(btn.dataset.tipo));
+  });
+}
+
+async function confirmarResgate(tipo) {
+  const erro = document.getElementById("cashback-resgate-error");
+  const botoes = document.querySelectorAll("#cashback-opcoes .opcao-resgate");
+  erro.textContent = "";
+  botoes.forEach((b) => (b.disabled = true));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/usuarios/cashback/resgatar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placa: placaAtual, pin: pinAtual, tipo }),
+    });
+    const data = await res.json();
+    if (!res.ok) { erro.textContent = data.erro || "Não foi possível resgatar agora."; return; }
+
+    const recibo = data.recibo;
+    showToast(`Resgatado: ${fmtMoeda(recibo.valor_resgatado)} → ${recibo.quantidade} ${recibo.unidade}`);
+    fecharResgateCashback();
+    atualizarSaldoCashback(0);
+  } catch (err) {
+    erro.textContent = "Sem conexão com o servidor.";
+  } finally {
+    botoes.forEach((b) => (b.disabled = false));
   }
 }
 
@@ -308,6 +388,8 @@ document.getElementById("f-nome-cadastro").addEventListener("keydown", (e) => {
   if (e.key === "Enter") fazerLogin();
 });
 document.getElementById("btn-atualizar-historico").addEventListener("click", atualizarHistorico);
+document.getElementById("btn-trocar-cashback").addEventListener("click", abrirResgateCashback);
+document.getElementById("btn-cancelar-cashback").addEventListener("click", fecharResgateCashback);
 document.getElementById("btn-add-carro").addEventListener("click", abrirAddCarro);
 document.getElementById("btn-cancelar-add-carro").addEventListener("click", fecharAddCarro);
 document.getElementById("btn-confirmar-add-carro").addEventListener("click", confirmarAddCarro);

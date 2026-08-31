@@ -564,8 +564,44 @@ def api_historico_usuario():
     return jsonify({
         "placa": placa.strip().upper(),
         "sessoes": sessoes,
+        # cashback_total: tudo que a conta já ganhou (histórico, nunca cai).
+        # cashback_disponivel: o que ainda dá pra resgatar (já descontando
+        # resgates anteriores) — é esse que a tela de resgate usa.
         "cashback_total": round(sum(s["cashback"] for s in sessoes), 2),
+        "cashback_disponivel": cg.saldo_cashback(placa),
     })
+
+
+@app.get("/api/usuarios/cashback/catalogo")
+def api_catalogo_cashback():
+    """Prêmios disponíveis pra resgate — aberto (não precisa de PIN pra só
+    listar as opções, só pra resgatar de verdade). O front usa isso em vez
+    de repetir CATALOGO_RESGATE hardcoded, então nome/taxa nunca divergem
+    do que o motor realmente vai calcular na hora de resgatar."""
+    return jsonify(cg.CATALOGO_RESGATE)
+
+
+@app.post("/api/usuarios/cashback/resgatar")
+@limiter.limit("10 per minute")
+def api_resgatar_cashback():
+    """Troca TODO o saldo disponível de uma vez pelo prêmio escolhido —
+    exige PIN pelo mesmo motivo do histórico (sem isso, bastava saber a
+    placa de alguém pra torrar o cashback dela)."""
+    dados = request.get_json(force=True) or {}
+    placa = (dados.get("placa") or "").strip()
+    pin = (dados.get("pin") or "").strip()
+    tipo = (dados.get("tipo") or "").strip()
+    if not placa or not pin:
+        return jsonify({"erro": "Informe a placa e o PIN."}), 400
+    if not cg.validar_pin(placa, pin):
+        return jsonify({"erro": "Placa ou PIN incorretos."}), 403
+    if tipo not in cg.CATALOGO_RESGATE:
+        return jsonify({"erro": "Opção de resgate inválida."}), 400
+
+    recibo = cg.resgatar_cashback(placa, tipo)
+    if recibo is None:
+        return jsonify({"erro": "Sem saldo de cashback disponível pra resgatar."}), 409
+    return jsonify({"ok": True, "recibo": recibo})
 
 
 @app.post("/api/usuarios/vincular")
