@@ -146,6 +146,13 @@ function classeDoStatus(status) {
   return "livre";
 }
 
+// Resultado do simulador por estação — guardado FORA do render, porque
+// renderEstacoes() reconstrói o grid inteiro a cada poll (4s); sem isso, o
+// resultado sumia antes do admin ter tempo de ler. Some quando a estação
+// deixa de estar ativa (sessão encerrada), pra não mostrar prévia velha
+// pro próximo cliente que ligar naquela estação.
+const simulacoesEstacao = {}; // { [estacao]: "texto pronto pra mostrar" }
+
 function renderEstacoes(estacoes) {
   const grid = document.getElementById("station-grid");
   grid.innerHTML = "";
@@ -155,13 +162,17 @@ function renderEstacoes(estacoes) {
     const emManutencao = e.status === "Manutenção";
     const classe = classeDoStatus(e.status);
 
+    if (!ativa) delete simulacoesEstacao[e.estacao];
+
     // O botão principal muda de ação conforme o estado; "colocar em
     // manutenção" só faz sentido pra estação Livre — não dá pra marcar uma
     // Ocupada (a API recusa, ver aplicar_manutencao no motor) nem faz
     // sentido oferecer de novo numa que já está em manutenção.
     let botaoPrincipal;
+    let botaoSimular = "";
     if (ativa) {
       botaoPrincipal = `<button class="btn small danger" data-estacao="${e.estacao}" data-acao="encerrar">Encerrar sessão</button>`;
+      botaoSimular = `<button class="btn small" data-estacao="${e.estacao}" data-acao="simular">Simular +30min</button>`;
     } else if (emManutencao) {
       botaoPrincipal = `<button class="btn small" data-estacao="${e.estacao}" data-acao="sair-manutencao">Sair da manutenção</button>`;
     } else {
@@ -173,6 +184,7 @@ function renderEstacoes(estacoes) {
     const motivo = (emManutencao && e.motivo_manutencao)
       ? `<div class="motivo-manutencao">Motivo: ${e.motivo_manutencao}</div>`
       : "";
+    const simTexto = simulacoesEstacao[e.estacao];
 
     const card = document.createElement("div");
     card.className = `station ${classe}`;
@@ -190,7 +202,8 @@ function renderEstacoes(estacoes) {
         <div><div class="k">Pagto</div><div class="v">${e.metodo_pagamento}</div></div>
       </div>
       ${motivo}
-      <div class="actions">${botaoPrincipal}</div>
+      <div class="actions">${botaoPrincipal}${botaoSimular}</div>
+      <div class="simulador-resultado-admin" id="sim-resultado-${e.estacao}" ${simTexto ? "" : "hidden"}>${simTexto || ""}</div>
       ${linkManutencao}
     `;
     grid.appendChild(card);
@@ -204,6 +217,7 @@ function renderEstacoes(estacoes) {
       else if (acao === "iniciar") abrirModal(num);
       else if (acao === "entrar-manutencao") abrirModalManutencao(num);
       else if (acao === "sair-manutencao") sairDaManutencao(num);
+      else if (acao === "simular") simularTempoEstacao(num);
     });
   });
 }
@@ -467,6 +481,27 @@ async function encerrarSessao(numEstacao) {
     if (!res.ok) { showToast(data.erro || "Erro ao encerrar sessão."); return; }
     showToast(`Recibo emitido — Estação ${numEstacao}: ${fmtMoeda(data.recibo.valor_sessao)}`);
     refresh();
+  } catch (err) {
+    showToast("Erro de conexão com a API.");
+  }
+}
+
+// ─── Simulador "e se essa sessão continuasse por mais 30 min?" ─────────────
+// Mesma rota que o totem usa (api_estimar_sessao) — não recalcula tarifa
+// aqui, só mostra o que a API já calculou, pra nunca divergir do valor que
+// seria cobrado de verdade. Resultado fica em simulacoesEstacao (ver
+// comentário lá em cima) pra sobreviver ao próximo poll.
+async function simularTempoEstacao(numEstacao) {
+  try {
+    const res = await fetch(`${API_BASE}/api/sessoes/${numEstacao}/estimar?minutos=30`);
+    const data = await res.json();
+    if (!res.ok) { showToast(data.erro || "Não foi possível simular agora."); return; }
+
+    simulacoesEstacao[numEstacao] =
+      `+30min ≈ <b>${fmtMoeda(data.valor_projetado)}</b> (+${fmtMoeda(data.custo_adicional)})`;
+
+    const el = document.getElementById(`sim-resultado-${numEstacao}`);
+    if (el) { el.innerHTML = simulacoesEstacao[numEstacao]; el.hidden = false; }
   } catch (err) {
     showToast("Erro de conexão com a API.");
   }
