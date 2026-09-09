@@ -11,7 +11,7 @@ Sao tres coisas, nesta ordem:
 
 O chatbot.py chama as duas primeiras ANTES de gastar uma chamada de LLM, e a
 terceira depois que a resposta volta. Nada aqui depende de rede nem de banco,
-entao da pra testar tudo offline (entregas/tests/test_guardrails.py).
+entao da pra testar tudo offline (chatbot/tests/test_guardrails.py).
 """
 
 from __future__ import annotations

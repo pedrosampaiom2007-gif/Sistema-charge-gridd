@@ -60,7 +60,7 @@ com uma das placas acima, se quiser números mais "frescos" pro vídeo.
 
 ## Roteiro de gravação sugerido pra aproveitar esses dados
 
-1. **Totem** (`entregas/files/index.html`): mostrar uma placa livre (ex: `DEF7M01`) iniciando uma recarga nova — mostra o fluxo completo + a nota de tarifa (madrugada ou solar, dependendo da hora real).
-2. **App do motorista** (`entregas/app/index.html`): logar com `JKL4M56` / PIN `0000` — o histórico já aparece populado, dá pra mostrar o assistente respondendo sobre o gasto pessoal.
-3. **Dashboard** (`entregas/frontend/index.html`): logar com `admin` / `chargegrid2026` — grid já mostra 3 estações ocupadas + 1 em manutenção lado a lado, KPIs com número de verdade, e os dois gráficos (demanda e geração solar) já respondem a hover com tooltip mostrando hora + valor exato.
+1. **Totem** (`frontend/totem/index.html`): mostrar uma placa livre (ex: `DEF7M01`) iniciando uma recarga nova — mostra o fluxo completo + a nota de tarifa (madrugada ou solar, dependendo da hora real).
+2. **App do motorista** (`frontend/app/index.html`): logar com `JKL4M56` / PIN `0000` — o histórico já aparece populado, dá pra mostrar o assistente respondendo sobre o gasto pessoal.
+3. **Dashboard** (`frontend/dashboard/index.html`): logar com `admin` / `chargegrid2026` — grid já mostra 3 estações ocupadas + 1 em manutenção lado a lado, KPIs com número de verdade, e os dois gráficos (demanda e geração solar) já respondem a hover com tooltip mostrando hora + valor exato.
 4. Se quiser mostrar a funcionalidade de manutenção ao vivo (em vez de só a estação 4 já pronta), tirar a estação 4 da manutenção primeiro (**Sair da manutenção**) e colocar de novo na frente da câmera.

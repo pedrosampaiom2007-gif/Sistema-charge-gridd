@@ -46,7 +46,7 @@ except KeyError:
     raise SystemExit(
         "[ERRO] DATABASE_URL não está definida.\n"
         "       Crie um arquivo .env na raiz do repositório (um nível acima de\n"
-        "       entregas/) com DATABASE_URL=postgresql://... — veja a seção\n"
+        "       backend/) com DATABASE_URL=postgresql://... — veja a seção\n"
         "       'Configuração' do README.md."
     )
 
@@ -143,11 +143,11 @@ _DEMANDA_FALLBACK = {
 
 try:
     import joblib
-    # Caminho absoluto, ancorado nesta pasta (entregas/) — um caminho relativo
-    # só resolveria se o processo fosse iniciado com CWD == entregas/, o que
-    # não é o caso ao rodar a API (README manda "cd entregas/files" antes),
-    # e fazia o modelo real nunca carregar nesse fluxo (caía sempre no
-    # dicionário de fallback, silenciosamente).
+    # Caminho absoluto, ancorado nesta pasta (backend/) — um caminho relativo
+    # só resolveria se o processo fosse iniciado com CWD == backend/, o que
+    # nem sempre é o caso (o chatbot, por exemplo, importa este módulo de
+    # chatbot/) — um caminho relativo fazia o modelo real nunca carregar nesse
+    # fluxo (caía sempre no dicionário de fallback, silenciosamente).
     _CAMINHO_MODELO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelo_demanda.pkl")
     _MODELO_ML = joblib.load(_CAMINHO_MODELO)
     print("[IA] modelo_demanda.pkl carregado com sucesso (RandomForest, dados SP2).")

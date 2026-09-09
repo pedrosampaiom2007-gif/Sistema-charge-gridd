@@ -7,7 +7,7 @@ com API/dashboard/chatbot, não é um banco de teste descartável):
   - regressão da demonstracao_comercial() com o banco mockado (psycopg2)
 
 Como rodar (da raiz do repo):
-    python -m unittest discover -s entregas/tests -v
+    python -m unittest discover -s backend/tests -v
 """
 
 import contextlib
@@ -17,7 +17,12 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# backend/ (motor, solar) e chatbot/ (chatbot, guardrails) são pastas irmãs na
+# raiz do repo — as duas entram no sys.path pra os testes rodarem de qualquer
+# diretório.
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(_RAIZ, "backend"))
+sys.path.insert(0, os.path.join(_RAIZ, "chatbot"))
 
 import ev_chargegrid as cg
 

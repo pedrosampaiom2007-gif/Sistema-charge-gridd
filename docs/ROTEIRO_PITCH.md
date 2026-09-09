@@ -112,7 +112,7 @@ gravação que aproveita esses dados sem precisar cadastrar nada na hora.
 1. **Pilar 2: "PIX, cartão, app ou QR code" virou só "via Pix"**. Motivo:
    o totem tem 4 botões de método de pagamento, mas só um fluxo de
    confirmação existe de verdade — a tela de pagamento (`screen-pagamento`
-   em `entregas/files/index.html`) tem o texto fixo "Escaneie para pagar
+   em `frontend/totem/index.html`) tem o texto fixo "Escaneie para pagar
    via Pix" e gera um QR code real (biblioteca `QRCode`), **sempre**,
    não importa qual botão foi clicado antes. Cartão/App/QR Code são
    rótulos que ficam salvos na sessão (aparecem no histórico, no

@@ -9,7 +9,7 @@ número solto sem fonte num pitch.
 
 ## O que já está no sistema hoje
 
-- **Janela de desconto solar** (`entregas/solar_optimizer.py`): o motor busca
+- **Janela de desconto solar** (`backend/solar_optimizer.py`): o motor busca
   a previsão de radiação solar do dia (Open-Meteo, API pública sem chave) e
   aplica um desconto de até 10% na tarifa nas horas de maior geração
   prevista — desde que não seja horário de pico. É a mesma ideia de "tarifa

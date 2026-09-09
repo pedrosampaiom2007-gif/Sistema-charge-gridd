@@ -15,7 +15,7 @@ Por que precisa existir:
 
 Como rodar:
   cd backend
-  pip install -r requirements.txt
+  pip install -r "requirements (1).txt"
   python api_server.py
   -> API sobe em http://localhost:5000
 """
@@ -31,9 +31,15 @@ import sys
 import threading
 import time
 
-# ev_chargegrid.py mora em entregas/, uma pasta acima deste arquivo — sem
-# isso o import falha com ModuleNotFoundError quando rodado a partir daqui.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ev_chargegrid.py e solar_optimizer.py moram nesta mesma pasta (backend/);
+# chatbot.py mora em chatbot/, na raiz do repositório. Sem colocar as duas
+# pastas no sys.path, o import falha com ModuleNotFoundError dependendo de
+# onde o processo for iniciado (o gunicorn do Render sobe com rootDir=backend,
+# mas rodar "python backend/api_server.py" da raiz também precisa funcionar).
+_PASTA_BACKEND = os.path.dirname(os.path.abspath(__file__))
+_RAIZ = os.path.dirname(_PASTA_BACKEND)
+sys.path.insert(0, _PASTA_BACKEND)
+sys.path.insert(0, os.path.join(_RAIZ, "chatbot"))
 
 import ev_chargegrid as cg
 import chatbot

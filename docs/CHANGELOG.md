@@ -11,8 +11,8 @@
 - Chatbot com roteador de tempo real (banco) vs. histórico (RAG) vs. dúvidas gerais de carro elétrico, rodando com Groq (nuvem, sem custo no uso normal) — disponível como script local ou notebook Colab, sem exigir upload manual de arquivo em nenhum dos dois.
 - Recuperação automática de sessões ativas quando a API reinicia (evita duplicar sessão na mesma estação).
 - Landing page única, separando claramente os três públicos (motorista no totem, motorista no app, administrador).
-- **Testes automatizados** (`entregas/tests/`) cobrindo tarifação dinâmica, DLB, hash/mascaramento LGPD e a correção da demo comercial — ver `docs/INSTALL.md`, passo 11.
-- Modelo de IA preditiva (`modelo_demanda.pkl`) agora carrega de verdade também rodando pelo fluxo documentado (`cd entregas/files && python api_server.py`) — o carregamento usava caminho relativo e dependia do diretório de onde o processo era iniciado; sem isso, a API sempre caía no dicionário de tarifas fixo, mesmo com o modelo treinado disponível.
+- **Testes automatizados** (`backend/tests/` e `chatbot/tests/`) cobrindo tarifação dinâmica, DLB, hash/mascaramento LGPD e a correção da demo comercial — ver `docs/INSTALL.md`, passo 11.
+- Modelo de IA preditiva (`modelo_demanda.pkl`) agora carrega de verdade também rodando pelo fluxo documentado (`cd backend && python api_server.py`) — o carregamento usava caminho relativo e dependia do diretório de onde o processo era iniciado; sem isso, a API sempre caía no dicionário de tarifas fixo, mesmo com o modelo treinado disponível.
 - API pronta pra deploy: porta e modo debug configuráveis por variável de ambiente (`PORT`, `FLASK_DEBUG`) e `Procfile`/`render.yaml` no repositório — ver `docs/DEPLOY.md`.
 - **Revisão de segurança** (ver `docs/SECURITY.md`): rate limiting, CORS por allowlist, cabeçalhos anti-clickjacking, bloqueio de conta por tentativas de login e revogação de token no logout.
 - **Cadastro de novo motorista**: antes, uma placa não reconhecida travava sem nenhum caminho pra frente — o sistema só funcionava pras 4 placas de teste. Agora dá pra se cadastrar direto no totem (quando a placa não é reconhecida na hora de iniciar a recarga) ou no app (link "Ainda não tem cadastro?" na tela de login) — os dois usam o mesmo `POST /api/usuarios`.
@@ -60,7 +60,7 @@ A quarta ideia — comissão/modelo de negócio documentado — virou [`docs/BUS
 
 A partir de uma análise competitiva (comparando o ChargeGrid com plataformas reais como Driivz e AMPECO), três recursos entraram — todos verificados contra API real antes de documentar, já que a análise que motivou isso tinha erros factuais sobre o próprio repositório (ver `docs/GOODWE_ROADMAP.md` pro detalhe da verificação). Ficaram descritos com detalhe técnico em `docs/ARCHITECTURE.md` (seção "Solar, OCPP e telemetria de hardware"):
 
-- Janela de desconto solar (`entregas/solar_optimizer.py`), calculada a partir de previsão real de radiação solar (Open-Meteo).
+- Janela de desconto solar (`backend/solar_optimizer.py`), calculada a partir de previsão real de radiação solar (Open-Meteo).
 - DLB comunicando o limite de potência de cada estação no vocabulário real do OCPP 1.6J (`SetChargingProfile`).
 - Contrato de telemetria (`POST /api/estacoes/<n>/telemetria`) pronto pro sensor físico de ocupação que o hardware vai usar.
 

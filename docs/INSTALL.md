@@ -39,20 +39,19 @@ cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
 ### 4. Instalar as dependências
 
 ```powershell
-cd entregas
+cd backend
 pip install -r "requirements (1).txt"
 ```
 As aspas em volta do nome do arquivo são obrigatórias — ele tem um espaço e um parêntese no nome, sem aspas o PowerShell entende como dois comandos diferentes e dá erro. A instalação baixa Flask, psycopg2, scikit-learn, groq etc. — demora alguns minutos na primeira vez. Se algum pacote falhar com erro de rede, rode o mesmo comando de novo (timeout de download é comum e geralmente resolve na segunda tentativa).
 
 ### 5. Conferir o `.env`
 
-Confirme que existe um arquivo `.env` na **raiz do repositório** (um nível acima de `entregas/`, mesmo nível do README) com `DATABASE_URL` e `GROQ_API_KEY` preenchidos — veja a seção "Configuração" acima se ainda não criou. Sem isso, o próximo passo falha na hora.
+Confirme que existe um arquivo `.env` na **raiz do repositório** (um nível acima de `backend/`, mesmo nível do README) com `DATABASE_URL` e `GROQ_API_KEY` preenchidos — veja a seção "Configuração" acima se ainda não criou. Sem isso, o próximo passo falha na hora.
 
 ### 6. Subir a API — esse terminal fica ocupado, não feche
 
 Ainda no mesmo terminal:
 ```powershell
-cd files
 python api_server.py
 ```
 Espere aparecer algo parecido com isto (pode levar alguns segundos):
@@ -76,10 +75,10 @@ cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
 
 Com a API do passo 6 rodando, abra estes arquivos direto no navegador (duplo clique no Explorador de Arquivos, ou arraste o arquivo pra uma aba do Chrome/Edge):
 
-- **Landing page** — `entregas/index.html`: escolhe entre motorista, minha conta ou administrador.
-- **Totem** — `entregas/files/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número). Abaixo do botão "Iniciar recarga" aparece a tarifa do momento — entre 0h e 6h ela mostra desconto de madrugada.
-- **App do motorista** — `entregas/app/index.html`: login com uma das placas de teste acima **e o PIN `0000`** (PIN de teste de todas as 4 contas — troque antes de uma apresentação real) — mostra histórico de pagamentos e o chat.
-- **Dashboard (gestor)** — `entregas/frontend/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real). Em cada estação livre tem um link "Colocar em manutenção" (some enquanto a estação está ocupada); e um botão "Baixar relatório do dia" no topo da lista de estações baixa um `.txt` com o resumo do dia.
+- **Landing page** — `frontend/index.html`: escolhe entre motorista, minha conta ou administrador.
+- **Totem** — `frontend/totem/index.html`: digite uma placa de teste (`ABC1D23`, `XYZ9F88`, `GHI3K45` ou `DEF7M01`) pra simular uma recarga. Pra testar uma estação específica em vez da 1, adicione `?estacao=3` no final do endereço, na barra do navegador (troque o número). Abaixo do botão "Iniciar recarga" aparece a tarifa do momento — entre 0h e 6h ela mostra desconto de madrugada.
+- **App do motorista** — `frontend/app/index.html`: login com uma das placas de teste acima **e o PIN `0000`** (PIN de teste de todas as 4 contas — troque antes de uma apresentação real) — mostra histórico de pagamentos e o chat.
+- **Dashboard (gestor)** — `frontend/dashboard/index.html`: login com `admin` / `chargegrid2026` (senha de teste — troque antes de uma apresentação real). Em cada estação livre tem um link "Colocar em manutenção" (some enquanto a estação está ocupada); e um botão "Baixar relatório do dia" no topo da lista de estações baixa um `.txt` com o resumo do dia.
 
 ### 9. Testar a API direto, sem interface (mais rápido pra conferir um endpoint isolado)
 
@@ -113,7 +112,7 @@ Se qualquer um desses comandos travar sem responder, volte no terminal do passo 
 
 Pode ser no segundo terminal — não depende da API estar no ar (o chatbot fala direto com o Postgres):
 ```powershell
-cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd\entregas"
+cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd\chatbot"
 python chatbot.py
 ```
 Faça uma pergunta sobre dado real (ex: "quantas sessões eu tive hoje?") e uma pergunta geral de carro elétrico, pra ver os dois modos de resposta funcionando. `Ctrl+C` encerra.
@@ -122,10 +121,11 @@ Faça uma pergunta sobre dado real (ex: "quantas sessões eu tive hoje?") e uma 
 
 ### 11. Rodar os testes automatizados
 
-São 51 testes cobrindo tarifação dinâmica (inclusive os descontos de madrugada e de janela solar), balanceamento de carga (DLB), hash/mascaramento de placa (LGPD), a correção da demo comercial, a busca do chatbot (que trazia dado de receita pra pergunta sobre bateria) e a fronteira de acesso do chat (o padrão não pode enxergar faturamento) — sem escrever no Postgres de verdade (o banco é mockado nesses testes):
+São 85 testes (57 do motor + 28 do chatbot) cobrindo tarifação dinâmica (inclusive os descontos de madrugada e de janela solar), balanceamento de carga (DLB), hash/mascaramento de placa (LGPD), a correção da demo comercial, a busca do chatbot (que trazia dado de receita pra pergunta sobre bateria) e a fronteira de acesso do chat (o padrão não pode enxergar faturamento) — sem escrever no Postgres de verdade (o banco é mockado nesses testes):
 ```powershell
 cd "C:\Users\pedro\PycharmProjects\Sistema-charge-gridd"
-python -m unittest discover -s entregas/tests -v
+python -m unittest discover -s backend/tests -v
+python -m unittest discover -s chatbot/tests -v
 ```
 Esperado: `OK` na última linha, com cada teste listado como `ok` acima.
 
