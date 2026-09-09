@@ -10,7 +10,7 @@ Sistema de gestão comercial de recarga de veículos elétricos, desenvolvido pa
 
 ## Visão geral
 
-O motor (`entregas/ev_chargegrid.py`) controla até 10 estações de recarga: autenticação de motorista por placa (hash SHA-256, com mascaramento em conformidade com a LGPD), balanceamento de carga entre estações ativas (DLB), tarifação dinâmica por horário e demanda, e pagamento via gateway simulado (Mercado Pago sandbox). Uma API Flask expõe esse motor para três clientes web (totem, dashboard, app do motorista) e um chatbot (rodando local ou no Colab) que responde em linguagem natural, combinando dados em tempo real com um histórico de 60 sessões reais.
+O motor (`backend/ev_chargegrid.py`) controla até 10 estações de recarga: autenticação de motorista por placa (hash SHA-256, com mascaramento em conformidade com a LGPD), balanceamento de carga entre estações ativas (DLB), tarifação dinâmica por horário e demanda, e pagamento via gateway simulado (Mercado Pago sandbox). Uma API Flask expõe esse motor para três clientes web (totem, dashboard, app do motorista) e um chatbot (rodando local ou no Colab) que responde em linguagem natural, combinando dados em tempo real com um histórico de 60 sessões reais.
 
 **O banco de dados é Postgres na nuvem (Supabase), não um arquivo local** — qualquer processo, de qualquer computador com a credencial certa, lê e escreve no mesmo banco. **A IA do chatbot roda na nuvem (Groq)**, não localmente — não depende de instalar nem baixar modelo nenhum.
 
@@ -31,19 +31,32 @@ O motor (`entregas/ev_chargegrid.py`) controla até 10 estações de recarga: au
 | 🎬 [`docs/ROTEIRO_PITCH.md`](docs/ROTEIRO_PITCH.md) | Roteiro do vídeo de apresentação (3:00), com o que foi corrigido e por quê |
 | ✅ [`docs/TAREFAS_EQUIPE.md`](docs/TAREFAS_EQUIPE.md) | Divisão hardware/software da reta final, com contrato de API já pronto |
 | 🧪 [`docs/DADOS_TESTE.md`](docs/DADOS_TESTE.md) | Placas, PIN e login do admin já populados no banco — pronto pra gravar o vídeo sem cadastrar nada na hora |
+| 🗂️ [`docs/ESTRUTURA.md`](docs/ESTRUTURA.md) | As quatro pastas do repositório e de onde veio cada arquivo |
+
+<br>
+
+## 🗂️ Organização do repositório
+
+| Pasta | O que tem dentro |
+|---|---|
+| ⚙️ [`backend/`](backend/) | Motor, API Flask, janela solar, modelo de IA e os testes do motor — tudo que roda em Python no servidor |
+| 🖥️ [`frontend/`](frontend/) | Landing page e as 3 telas (`totem/`, `app/`, `dashboard/`) — HTML/CSS/JS puro, sem build |
+| 🤖 [`chatbot/`](chatbot/) | Assistente conversacional: versão local, versão Colab, guardrails, base do RAG e testes offline |
+| 📚 [`docs/`](docs/) | Toda a documentação da tabela acima |
+
+Cada pasta tem um `README.md` próprio explicando o que há dentro e como rodar. Estrutura arquivo por arquivo em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); o mapa dos caminhos antigos (`entregas/…`) pros novos está em [`docs/ESTRUTURA.md`](docs/ESTRUTURA.md).
 
 <br>
 
 ## Início rápido
 
 ```powershell
-cd entregas
+cd backend
 pip install -r "requirements (1).txt"
-cd files
 python api_server.py
 ```
 
-Depois é só abrir `entregas/index.html` no navegador. Passo a passo completo, com configuração do `.env` e testes, em [`docs/INSTALL.md`](docs/INSTALL.md).
+Depois é só abrir `frontend/index.html` no navegador. Passo a passo completo, com configuração do `.env` e testes, em [`docs/INSTALL.md`](docs/INSTALL.md).
 
 <br>
 

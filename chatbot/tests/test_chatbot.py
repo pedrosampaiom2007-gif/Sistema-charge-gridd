@@ -5,14 +5,19 @@ responder) depende do Groq e/ou do Postgres real, testado manualmente
 contra a API ao vivo, mesmo padrão do resto do projeto.
 
 Como rodar (da raiz do repo):
-    python -m unittest discover -s entregas/tests -v
+    python -m unittest discover -s chatbot/tests -v
 """
 
 import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# backend/ (motor, solar) e chatbot/ (chatbot, guardrails) são pastas irmãs na
+# raiz do repo — as duas entram no sys.path pra os testes rodarem de qualquer
+# diretório.
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(_RAIZ, "backend"))
+sys.path.insert(0, os.path.join(_RAIZ, "chatbot"))
 
 import chatbot
 

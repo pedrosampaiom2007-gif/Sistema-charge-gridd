@@ -8,18 +8,24 @@ no seu computador, num terminal, sem precisar de Colab nem upload de nada.
 Reaproveita o mesmo .env que a API já usa (DATABASE_URL, GROQ_API_KEY).
 
 Como rodar:
-  cd entregas
+  cd chatbot
   py chatbot.py
 """
 
 import os
 import json
 import re
+import sys
 import unicodedata
 from groq import Groq
 from dotenv import load_dotenv
 
 import guardrails
+
+# O motor (ev_chargegrid.py) mora em backend/, pasta irmã desta — sem isso o
+# import falha com ModuleNotFoundError quando o chatbot é rodado daqui.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"))
 
 from ev_chargegrid import (
     listar_sessoes_ativas,

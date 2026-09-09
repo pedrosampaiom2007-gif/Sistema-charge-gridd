@@ -2,7 +2,7 @@
 
 Este guia explica como usar o ChargeGrid Intelligence no dia a dia, sem entrar em detalhes técnicos de código. Se você procura como instalar e rodar o projeto, veja [`docs/INSTALL.md`](INSTALL.md).
 
-O sistema tem **três telas**, cada uma pensada pra um tipo de pessoa diferente: o **totem** (motorista, na estação), o **app** (motorista, no celular/computador, fora da estação) e o **dashboard** (administrador). Todas começam pela página inicial (`entregas/index.html`), que pergunta quem você é.
+O sistema tem **três telas**, cada uma pensada pra um tipo de pessoa diferente: o **totem** (motorista, na estação), o **app** (motorista, no celular/computador, fora da estação) e o **dashboard** (administrador). Todas começam pela página inicial (`frontend/index.html`), que pergunta quem você é.
 
 <br>
 

@@ -80,7 +80,7 @@ neste estágio. Terminar o Papel A e deixar o Papel B pra depois da entrega
 
 **Pedro Sampaio — execução das melhorias.** Já feito nesta rodada (não é
 mais tarefa, é o que já está no repositório):
-- Módulo de geração solar simulada (`entregas/solar_optimizer.py`) com
+- Módulo de geração solar simulada (`backend/solar_optimizer.py`) com
   desconto de tarifa na janela de maior geração prevista.
 - DLB comunicando limite de potência no vocabulário OCPP 1.6J
   (`SetChargingProfile`).
