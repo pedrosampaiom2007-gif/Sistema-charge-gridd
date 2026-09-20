@@ -64,11 +64,14 @@ Depois é só abrir `frontend/index.html` no navegador. Passo a passo completo, 
 
 | Integrante           | RM     |
 |----------------------|--------|
-| Pedro Sampaio | xxxxxx |
-| Raul Sampaio | xxxxxx |
-| Luan de Araujo | xxxxxx |
-| Kevin Rodrigues | xxxxxx |
-| Pedro Ribeiro Lopes | 570083 |
+| Raul Sampaio | 573523 |
+| Luan Carneiro | 573691 |
+| Kevin Rodrigues | 571777 |
+| Pedro Ribeiro | 570083 |
+| Pedro Sampaio | 573522 |
+| Pedro Vianna | 570747 |
+| Lana Ozeki | 569795 |
+
 
 <br>
 
