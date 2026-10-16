@@ -1,0 +1,108 @@
+{
+  "premissas": {
+    "sessoes_por_dia": 20,
+    "pv_kwp": 50.0,
+    "pv_kwh_por_kwp_dia": 4.5,
+    "bateria_kwh": 100.0,
+    "ef_rede_media": 0.0289,
+    "ef_gas": 0.49,
+    "ef_solar": 0.041,
+    "fracao_padrao": 0.2
+  },
+  "tarifa": {
+    "0.1": {
+      "energia_movida_pct_do_dia": 2.0765734608948945,
+      "fator_medio_base": 1.027407701631957,
+      "fator_medio_novo": 1.0191014077883773,
+      "conta_menor_pct": 0.8084710510137039,
+      "pct_hora_mais_carregada": 8.99052761817364,
+      "preco_kwh_movido_menor_pct": 30.76923076923077
+    },
+    "0.2": {
+      "energia_movida_pct_do_dia": 4.153146921789789,
+      "fator_medio_base": 1.027407701631957,
+      "fator_medio_novo": 1.010795113944798,
+      "conta_menor_pct": 1.6169421020273855,
+      "pct_hora_mais_carregada": 9.509670983397365,
+      "preco_kwh_movido_menor_pct": 30.76923076923077
+    },
+    "0.3": {
+      "energia_movida_pct_do_dia": 6.2297203826846825,
+      "fator_medio_base": 1.027407701631957,
+      "fator_medio_novo": 1.0024888201012183,
+      "conta_menor_pct": 2.4254131530410894,
+      "pct_hora_mais_carregada": 10.028814348621088,
+      "preco_kwh_movido_menor_pct": 30.76923076923077
+    }
+  },
+  "base": {
+    "pico_pct": 20.765734608948943,
+    "janela_solar_pct": 28.356195341765904,
+    "madrugada_pct": 3.2666534265619327,
+    "outras_pct": 47.61141662272322,
+    "hora_mais_carregada": 13,
+    "pct_hora_mais_carregada": 8.471384252949917
+  },
+  "bateria": [
+    {
+      "nome": "Sem nada (so a rede)",
+      "rede_total_kwh": 486.8,
+      "rede_pico_kwh": 101.08759607636344,
+      "rede_pico_menos_pct": 0.0,
+      "solar_no_total_pct": 0.0,
+      "da_bateria_kwh": 0.0,
+      "co2_media_kg": 14.068520000000003,
+      "co2_ponta_fossil_kg": 60.680010550811176,
+      "co2_ponta_fossil_menos_pct": 0.0,
+      "co2_media_menos_pct": 0.0
+    },
+    {
+      "nome": "Tarifa desloca 20% do pico",
+      "rede_total_kwh": 486.8,
+      "rede_pico_kwh": 80.87007686109075,
+      "rede_pico_menos_pct": 19.999999999999996,
+      "solar_no_total_pct": 0.0,
+      "da_bateria_kwh": 0.0,
+      "co2_media_kg": 14.068520000000001,
+      "co2_ponta_fossil_kg": 51.35771244064894,
+      "co2_ponta_fossil_menos_pct": 15.363046290765048,
+      "co2_media_menos_pct": 1.1102230246251565e-14
+    },
+    {
+      "nome": "Paineis",
+      "rede_total_kwh": 279.66710389622244,
+      "rede_pico_kwh": 94.55350516727253,
+      "rede_pico_menos_pct": 6.463790972094074,
+      "solar_no_total_pct": 42.54989648803976,
+      "da_bateria_kwh": 0.0,
+      "co2_media_kg": 16.574828042855707,
+      "co2_ponta_fossil_kg": 60.17344927548507,
+      "co2_ponta_fossil_menos_pct": 0.8348074938153371,
+      "co2_media_menos_pct": -17.815008564196532
+    },
+    {
+      "nome": "Paineis + bateria",
+      "rede_total_kwh": 263.5420426298817,
+      "rede_pico_kwh": 78.42844390093174,
+      "rede_pico_menos_pct": 22.415363560841385,
+      "solar_no_total_pct": 45.862357717772866,
+      "da_bateria_kwh": 16.12506126634079,
+      "co2_media_kg": 16.76994128417843,
+      "co2_ponta_fossil_kg": 52.93329676689805,
+      "co2_ponta_fossil_menos_pct": 12.76650039048084,
+      "co2_media_menos_pct": -19.20188679533046
+    },
+    {
+      "nome": "Paineis + bateria + tarifa",
+      "rede_total_kwh": 263.0492405990094,
+      "rede_pico_kwh": 62.77250245860495,
+      "rede_pico_menos_pct": 37.902863560841396,
+      "solar_no_total_pct": 45.96359067399149,
+      "da_bateria_kwh": 11.563483493394893,
+      "co2_media_kg": 16.775904188751984,
+      "co2_ponta_fossil_kg": 45.720305072414725,
+      "co2_ponta_fossil_menos_pct": 24.653432559754997,
+      "co2_media_menos_pct": -19.244271527864896
+    }
+  ]
+}
